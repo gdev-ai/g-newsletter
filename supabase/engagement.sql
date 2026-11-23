@@ -46,8 +46,10 @@ create table if not exists challenges (
   solution text not null check (solution ~ '^[1-9]{81}$'),
   note text not null default '',                            -- shown to players, e.g. the prize or deadline
   closes_at timestamptz,                                    -- no new starts or submissions after this
+  pause_limit_ms int not null default 300000,               -- total pause time each player may take off the clock
   created_at timestamptz not null default now()
 );
+alter table challenges add column if not exists pause_limit_ms int not null default 300000;
 alter table challenges enable row level security;
 drop policy if exists challenges_admin on challenges;
 create policy challenges_admin on challenges for all using (is_admin()) with check (is_admin());
@@ -60,8 +62,14 @@ create table if not exists challenge_attempts (
   started_at timestamptz not null default now(),
   finished_at timestamptz,
   duration_ms bigint,
-  wrong_checks int not null default 0
+  wrong_checks int not null default 0,
+  paused_at timestamptz,                                    -- set while the player is paused
+  paused_ms bigint not null default 0,                      -- pause time already taken off the clock (capped)
+  last_seen_at timestamptz not null default now()           -- last check-in from an open game
 );
+alter table challenge_attempts add column if not exists paused_at timestamptz;
+alter table challenge_attempts add column if not exists paused_ms bigint not null default 0;
+alter table challenge_attempts add column if not exists last_seen_at timestamptz not null default now(); -- last check-in from an open game
 create unique index if not exists challenge_attempts_one_per_player on challenge_attempts (edition, lower(email));
 alter table challenge_attempts enable row level security;
 drop policy if exists challenge_attempts_admin on challenge_attempts;
@@ -76,10 +84,32 @@ create or replace function challenge_rank(p_edition text, p_ms bigint) returns b
   select count(*) + 1 from challenge_attempts a where a.edition = p_edition and a.duration_ms < p_ms;
 $$;
 
+-- Pausing: the grid is hidden and the clock stops, but only up to the challenge's pause_limit_ms in
+-- total per player. Past that the clock runs again even while paused, so a player can't screenshot
+-- the grid, pause, and solve it off the clock.
+--
+-- An open game checks in (challenge_ping) every 20 seconds. If check-ins stop for more than a minute
+-- (crash, power cut, laptop closed, lost connection) the game counts as paused from the last
+-- check-in, without the browser having to say so. The official time is always
+--   now - started_at - least(pause_limit_ms, paused_ms + time in the current pause)
+create or replace function challenge_paused_since(a challenge_attempts) returns timestamptz language sql stable as $$
+  select coalesce(a.paused_at, case when now() - a.last_seen_at > interval '60 seconds' then a.last_seen_at end);
+$$;
+
+create or replace function challenge_pause_total(a challenge_attempts, p_limit int) returns bigint language sql stable as $$
+  select least(p_limit::bigint, a.paused_ms + coalesce(floor(extract(epoch from (now() - challenge_paused_since(a))) * 1000)::bigint, 0));
+$$;
+
+-- The clock fields the browser needs to show the same time the server will record.
+create or replace function challenge_clock(a challenge_attempts, p_limit int) returns jsonb language sql stable as $$
+  select jsonb_build_object('started_at', a.started_at, 'paused_at', challenge_paused_since(a), 'paused_ms', a.paused_ms,
+    'pause_limit_ms', p_limit, 'server_now', now());
+$$;
+
 -- Public status for the edition's challenge (no puzzle, no names).
 create or replace function challenge_info(p_edition text) returns jsonb language sql stable security definer set search_path = public as $$
   select case when c.edition is null then jsonb_build_object('exists', false) else jsonb_build_object(
-    'exists', true, 'kind', c.kind, 'note', c.note, 'closes_at', c.closes_at,
+    'exists', true, 'kind', c.kind, 'note', c.note, 'closes_at', c.closes_at, 'pause_limit_ms', c.pause_limit_ms,
     'open', c.closes_at is null or c.closes_at > now(),
     'players', (select count(*) from challenge_attempts a where a.edition = c.edition),
     'solved', (select count(*) from challenge_attempts a where a.edition = c.edition and a.finished_at is not null)
@@ -106,8 +136,53 @@ begin
     insert into challenge_attempts (edition, name, email) values (p_edition, left(trim(p_name), 80), lower(trim(p_email)))
     returning * into a;
   end if;
-  return jsonb_build_object('status', 'playing', 'attempt', a.id, 'name', a.name, 'puzzle', c.puzzle,
-    'started_at', a.started_at, 'server_now', now());
+  return jsonb_build_object('status', 'playing', 'attempt', a.id, 'name', a.name, 'puzzle', c.puzzle)
+    || challenge_clock(a, c.pause_limit_ms);
+end $$;
+
+-- Pause and resume an unfinished attempt. Both are safe to repeat and return the current clock.
+create or replace function challenge_pause(p_attempt uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare a challenge_attempts; c challenges;
+begin
+  select * into a from challenge_attempts where id = p_attempt for update;
+  if not found then return jsonb_build_object('status', 'missing'); end if;
+  select * into c from challenges where edition = a.edition;
+  if a.finished_at is null and a.paused_at is null then
+    -- If check-ins had already stopped, the pause began at the last one.
+    update challenge_attempts set paused_at = coalesce(challenge_paused_since(a), now()) where id = a.id returning * into a;
+  end if;
+  return jsonb_build_object('status', 'ok') || challenge_clock(a, c.pause_limit_ms);
+end $$;
+
+-- Check-in from an open, unpaused game. If check-ins had lapsed (say the laptop slept with the game
+-- on screen), that gap is booked as pause time and the clock carries on. Never resumes a real pause.
+create or replace function challenge_ping(p_attempt uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare a challenge_attempts; c challenges;
+begin
+  select * into a from challenge_attempts where id = p_attempt for update;
+  if not found then return jsonb_build_object('status', 'missing'); end if;
+  select * into c from challenges where edition = a.edition;
+  if a.finished_at is null and a.paused_at is null then
+    update challenge_attempts set paused_ms = challenge_pause_total(a, c.pause_limit_ms), last_seen_at = now()
+    where id = a.id returning * into a;
+  end if;
+  return jsonb_build_object('status', 'ok') || challenge_clock(a, c.pause_limit_ms);
+end $$;
+
+create or replace function challenge_resume(p_attempt uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare a challenge_attempts; c challenges;
+begin
+  select * into a from challenge_attempts where id = p_attempt for update;
+  if not found then return jsonb_build_object('status', 'missing'); end if;
+  select * into c from challenges where edition = a.edition;
+  if a.finished_at is null then
+    update challenge_attempts set paused_ms = challenge_pause_total(a, c.pause_limit_ms), paused_at = null, last_seen_at = now()
+    where id = a.id returning * into a;
+  end if;
+  return jsonb_build_object('status', 'ok') || challenge_clock(a, c.pause_limit_ms);
 end $$;
 
 -- Checks a full grid. Correct: stops the clock and returns the time and rank.
@@ -127,8 +202,9 @@ begin
     update challenge_attempts set wrong_checks = wrong_checks + 1 where id = a.id;
     return jsonb_build_object('status', 'wrong');
   end if;
-  ms := floor(extract(epoch from (now() - a.started_at)) * 1000);
-  update challenge_attempts set finished_at = now(), duration_ms = ms where id = a.id;
+  ms := floor(extract(epoch from (now() - a.started_at)) * 1000) - challenge_pause_total(a, c.pause_limit_ms);
+  update challenge_attempts set finished_at = now(), duration_ms = ms,
+    paused_ms = challenge_pause_total(a, c.pause_limit_ms), paused_at = null, last_seen_at = now() where id = a.id;
   return jsonb_build_object('status', 'solved', 'duration_ms', ms, 'rank', challenge_rank(a.edition, ms));
 end $$;
 

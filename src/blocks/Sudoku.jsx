@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isCms } from '../lib/cms.js'
 import {
-  challengeInfo, challengeLeaderboard, challengeStart, challengeSubmit, formatMs, notInstalled, store,
+  challengeInfo, challengeLeaderboard, challengePause, challengePauseOnExit, challengePing, challengeResume, challengeStart, challengeSubmit, formatMs, notInstalled, store,
 } from '../lib/engagement.js'
 
 // The G Challenge: one timed Sudoku per edition. A player enters their name and company email,
@@ -29,6 +29,8 @@ const conflictsOf = (grid) => {
 }
 
 const saveKey = (edition) => `g-challenge:${edition}`
+const PING_MS = 20000 // check-in interval; the server treats a gap of over 60s as a pause
+const IDLE_MS = 120000 // pause automatically after this long without a move
 
 function Leaderboard({ rows, me }) {
   if (!rows?.length) return <p className="text-[13px] text-white/60">No finishers yet. Be the first.</p>
@@ -45,14 +47,27 @@ function Leaderboard({ rows, me }) {
   )
 }
 
-function Clock({ startedAt, offset, stopped }) {
-  const [now, setNow] = useState(() => Date.now())
+// Clock maths, matching challenge_pause_total in supabase/engagement.sql: pause time comes off the
+// clock only up to the pause limit, after which the clock runs again even while paused.
+const clockFields = (r) => ({
+  started_at: r.started_at, paused_at: r.paused_at || null, paused_ms: Number(r.paused_ms) || 0,
+  pause_limit_ms: Number(r.pause_limit_ms) || 0, offset: new Date(r.server_now).getTime() - Date.now(),
+})
+const serverNow = (g) => Date.now() + (g.offset || 0)
+const pauseTotal = (g, now) => Math.min(g.pause_limit_ms || 0, (g.paused_ms || 0) + (g.paused_at ? now - new Date(g.paused_at).getTime() : 0))
+const elapsedOf = (g, now) => now - new Date(g.started_at).getTime() - pauseTotal(g, now)
+
+function useServerNow(game, on) {
+  const [now, setNow] = useState(() => serverNow(game))
   useEffect(() => {
-    if (stopped != null) return undefined
-    const t = setInterval(() => setNow(Date.now()), 100)
+    if (!on) return undefined
+    const t = setInterval(() => setNow(serverNow(game)), 100)
     return () => clearInterval(t)
-  }, [stopped])
-  const ms = stopped ?? (now + offset - new Date(startedAt).getTime())
+  }, [game, on])
+  return now
+}
+
+function Clock({ ms }) {
   return <span className="font-display text-[clamp(28px,2.4vw,44px)] font-light tabular-nums" aria-live="off">{formatMs(ms)}</span>
 }
 
@@ -122,6 +137,10 @@ export default function Sudoku({ edition, title, intro, prize }) {
   const [form, setForm] = useState({ name: saved?.name || '', email: saved?.email || '' })
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  // A game in progress always comes back hidden after a reload, tab switch or leaving the page.
+  const [hidden, setHidden] = useState(Boolean(saved?.attempt && !saved?.result))
+  const [pausedBy, setPausedBy] = useState('away') // 'manual' | 'idle' | 'away'
+  const lastMove = useRef(Date.now())
   const sentFor = useRef('')
 
   const refresh = useCallback(async () => {
@@ -144,8 +163,10 @@ export default function Sudoku({ edition, title, intro, prize }) {
     try {
       const r = await challengeStart(edition, form.name, form.email)
       if (r.status === 'playing') {
-        const g = { attempt: r.attempt, puzzle: r.puzzle, started_at: r.started_at, offset: new Date(r.server_now).getTime() - Date.now(), name: r.name, email: form.email }
-        setGame(g); setGrid(g.grid || r.puzzle.split('').map(Number)); setPhase('playing'); setSel(r.puzzle.indexOf('0')); refresh()
+        const g = { attempt: r.attempt, puzzle: r.puzzle, ...clockFields(r), name: r.name, email: form.email }
+        setGame(g); setGrid(grid || r.puzzle.split('').map(Number)); setPhase('playing'); setSel(r.puzzle.indexOf('0'))
+        // Restarting an attempt that was left paused: keep the grid hidden until they press Resume.
+        setHidden(Boolean(r.paused_at)); setPausedBy('away'); lastMove.current = Date.now(); refresh()
       } else if (r.status === 'done') {
         const g = { name: r.name, email: form.email, result: { duration_ms: r.duration_ms, rank: r.rank, already: true } }
         setGame(g); setPhase('result'); refresh()
@@ -184,7 +205,58 @@ export default function Sudoku({ edition, title, intro, prize }) {
       .finally(() => setBusy(false))
   }, [grid, phase, game?.attempt, refresh])
 
-  const resetLocal = () => { store.del(saveKey(edition)); setGame(null); setGrid(null); setPhase('intro'); setMsg('') }
+  // Pause hides the grid at once; the server call stops the official clock (within the pause limit).
+  const live = useRef({ phase, game, hidden })
+  live.current = { phase, game, hidden }
+  const merge = (r) => { if (r?.status === 'ok') setGame((g) => (g ? { ...g, ...clockFields(r) } : g)) }
+  // `leaving` = the page is closing or the tab is hidden: send the pause so it survives the page shutting.
+  const pause = useCallback((reason = 'manual', leaving = false) => {
+    const { phase: p, game: g, hidden: h } = live.current
+    if (p !== 'playing' || !g?.attempt) return
+    if (!h) {
+      setHidden(true); setPausedBy(reason)
+      setGame((x) => (x && !x.paused_at ? { ...x, paused_at: new Date(serverNow(x)).toISOString() } : x))
+    }
+    if (leaving) challengePauseOnExit(g.attempt)
+    else challengePause(g.attempt).then(merge).catch(() => {})
+  }, [])
+  const resume = async () => {
+    if (!game?.attempt) return
+    setBusy(true)
+    try { merge(await challengeResume(game.attempt)) } catch { /* clock fields stay as last known */ }
+    lastMove.current = Date.now()
+    setBusy(false); setHidden(false); setSel((s) => s ?? game.puzzle.indexOf('0'))
+  }
+
+  // Pause on reload (so a game left open resumes paused), when the tab is hidden or closed, and when
+  // the reader goes to another page of the newsletter (this component unmounts).
+  useEffect(() => {
+    if (live.current.phase === 'playing') pause('away')
+    const onVis = () => { if (document.visibilityState === 'hidden') pause('away', true) }
+    const onHide = () => pause('away', true)
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('pagehide', onHide)
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', onHide); pause('away', true) }
+  }, [pause])
+
+  const resetLocal = () => { store.del(saveKey(edition)); setGame(null); setGrid(null); setPhase('intro'); setMsg(''); setHidden(false) }
+  const playing = phase === 'playing' && game && grid
+  const now = useServerNow(game || {}, Boolean(playing))
+  const pauseLeft = playing ? Math.max(0, (game.pause_limit_ms || 0) - pauseTotal(game, now)) : 0
+
+  // While the grid is on screen: check in every 20s so the server knows the game is still open
+  // (if check-ins stop, it counts the game as paused from the last one), and pause automatically
+  // after 2 minutes without a move. Those 2 minutes count; only the time after is paused.
+  const active = Boolean(playing && !hidden)
+  useEffect(() => {
+    if (!active) return undefined
+    const t = setInterval(() => { const g = live.current.game; if (g?.attempt) challengePing(g.attempt).then(merge).catch(() => {}) }, PING_MS)
+    return () => clearInterval(t)
+  }, [active])
+  useEffect(() => {
+    if (active && pauseLeft > 0 && Date.now() - lastMove.current >= IDLE_MS) pause('idle')
+  }, [active, now, pauseLeft, pause])
+  const onGrid = useCallback((update) => { lastMove.current = Date.now(); setGrid(update) }, [])
 
   const unavailable = info && !info.exists
   const closed = info?.exists && !info.open
@@ -193,17 +265,37 @@ export default function Sudoku({ edition, title, intro, prize }) {
   return (
     <div className="grid gap-12 bg-ink p-[clamp(24px,3vw,64px)] text-white lg:grid-cols-[minmax(0,1fr)_minmax(280px,.7fr)]">
       <div>
-        {phase === 'playing' && game && grid ? (
+        {playing ? (
           <>
             <div className="mb-6 flex items-end justify-between gap-6 border-b border-white/20 pb-4">
               <div>
                 <p className="label text-white/60">Playing as {game.name}</p>
-                <Clock startedAt={game.started_at} offset={game.offset || 0} />
+                <Clock ms={elapsedOf(game, now)} />
               </div>
-              <p className="max-w-[240px] text-right text-[12px] leading-[1.6] text-white/60">Fill every row, column and 3×3 box with 1–9. Your time stops when the grid is complete.</p>
+              <div className="flex flex-col items-end gap-3">
+                <p className="max-w-[240px] text-right text-[12px] leading-[1.6] text-white/60">Fill every row, column and 3×3 box with 1–9. Your time stops when the grid is complete.</p>
+                {!hidden && (
+                  <button type="button" onClick={() => pause('manual')} disabled={busy} className="border border-white/40 px-4 py-2 text-[11px] uppercase tracking-label text-white transition hover:bg-white hover:text-ink disabled:opacity-40">
+                    Pause <span aria-hidden="true">❙❙</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <Board puzzle={game.puzzle} grid={grid} setGrid={setGrid} sel={sel} setSel={setSel} locked={busy} />
-            <p role="status" className="mt-4 min-h-[20px] text-[13px] text-white/80">{busy ? 'Checking…' : msg}</p>
+            {hidden ? (
+              <div className="flex aspect-square w-full max-w-[min(560px,100%)] flex-col items-center justify-center border-2 border-white/20 px-8 text-center">
+                <p className="label text-white/60">Paused</p>
+                <p className="mt-4 max-w-[340px] text-[14px] leading-[1.7] text-white/75">
+                  {pausedBy === 'idle' && <>Paused after 2 minutes without a move. </>}
+                  {pauseLeft > 0
+                    ? <>The grid is hidden and your clock is stopped. Pause time left:<span className="tabular-nums text-white">{formatMs(pauseLeft).replace(/\.\d$/, '')}</span></>
+                    : 'You have used all your pause time, so the clock is running again.'}
+                </p>
+                <button type="button" onClick={resume} disabled={busy} className="btn mt-8 !min-w-[200px] disabled:opacity-40">Resume <span aria-hidden="true">→</span></button>
+              </div>
+            ) : (
+              <Board puzzle={game.puzzle} grid={grid} setGrid={onGrid}sel={sel} setSel={setSel} locked={busy} />
+            )}
+            <p role="status" className="mt-4 min-h-[20px] text-[13px] text-white/80">{busy && !hidden ? 'Checking…' : msg}</p>
           </>
         ) : phase === 'result' && game?.result ? (
           <div className="flex h-full flex-col justify-center py-8">
@@ -236,7 +328,7 @@ export default function Sudoku({ edition, title, intro, prize }) {
                   <span className="label text-white/60">Company email</span>
                   <input required type="email" maxLength={200} autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={field} placeholder="name@thegdevelopments.com" />
                 </label>
-                <p className="text-[12px] leading-[1.6] text-white/50">The clock starts when the grid appears. One official attempt per person; your email is only used to contact the winner.</p>
+                <p className="text-[12px] leading-[1.6] text-white/50">The clock starts when the grid appears. You can pause for up to {formatMs(info?.pause_limit_ms ?? 300000).replace(/\.\d$/, '')} in total; the game pauses itself if you leave the page or go 2 minutes without a move. One official attempt per person; your email is only used to contact the winner.</p>
                 {msg && <p role="alert" className="text-[13px] text-red-300">{msg}</p>}
                 <button disabled={busy || !info} className="btn !min-w-[220px] disabled:opacity-40">{busy ? 'Starting…' : 'Start the clock'} <span aria-hidden="true">→</span></button>
               </form>

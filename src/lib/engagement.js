@@ -1,6 +1,6 @@
 // Reader engagement calls (poll, G Challenge). All go through the database functions in
 // supabase/engagement.sql; the browser never reads raw responses or the puzzle's solution.
-import { supabase } from './supabase.js'
+import { supabase, supabaseAnonKey, supabaseUrl } from './supabase.js'
 
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null') } catch { return null } },
@@ -51,7 +51,24 @@ const call = async (fn, args) => {
 export const challengeInfo = (edition) => call('challenge_info', { p_edition: edition })
 export const challengeStart = (edition, name, email) => call('challenge_start', { p_edition: edition, p_name: name, p_email: email })
 export const challengeSubmit = (attempt, grid) => call('challenge_submit', { p_attempt: attempt, p_grid: grid })
-export const challengeLeaderboard = (edition, limit = 10) => call('challenge_leaderboard', { p_edition: edition, p_limit: limit })
+export const challengePause = (attempt) => call('challenge_pause', { p_attempt: attempt })
+export const challengeResume = (attempt) => call('challenge_resume', { p_attempt: attempt })
+export const challengePing = (attempt) => call('challenge_ping', { p_attempt: attempt })
+
+// Pause sent while the page is closing. A normal request can be cancelled as the tab shuts;
+// keepalive tells the browser to finish sending it anyway.
+export function challengePauseOnExit(attempt) {
+  if (useMock || !supabaseUrl || !supabaseAnonKey) return challengePause(attempt).catch(() => {})
+  try {
+    fetch(`${supabaseUrl}/rest/v1/rpc/challenge_pause`, {
+      method: 'POST', keepalive: true,
+      headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_attempt: attempt }),
+    }).catch(() => {})
+  } catch { /* nothing more we can do while the page closes */ }
+  return undefined
+}
+export const challengeLeaderboard =(edition, limit = 10) => call('challenge_leaderboard', { p_edition: edition, p_limit: limit })
 
 // 83456 -> "1:23.4"
 export function formatMs(ms) {
