@@ -12,7 +12,6 @@ let seq = 0
 const block = (type, col_span, content, row_span = 1) => ({ id: `${EDITION}-b${++seq}`, type, col_span, row_span, content })
 
 const LINKS = {
-  knowledgeBox: 'https://newgiza87182655gdevelopment.sharepoint.com/sites/KnowledgeBox',
   brandBox: 'https://newgiza87182655gdevelopment.sharepoint.com/sites/BrandBox',
   itSupport: 'https://itsupport.thegdevelopments.com/app/itdesk/ui/ssp/pages/home',
   hrPortal: 'https://hrp.thegdevelopments.com/',
@@ -39,20 +38,20 @@ const sections = [
     photo_url: '/images/transform.png',
     read_min: 5,
     links: [
-      { label: 'Open Knowledge Box', url: LINKS.knowledgeBox },
+      { label: 'Open Brand Box', url: LINKS.brandBox },
       { label: 'IT service desk', url: LINKS.itSupport },
     ],
     // Owner: IT (Serafy) & Business Applications (Amgad). Source: AI & Development Monthly Review, Nov 2026; ManageEngine go-live.
     body: [
       'This quarter, a lot of what used to live in inboxes, spreadsheets and vendor tickets moved onto platforms we own.',
-      'Knowledge Box and Brand Box went live: two assistants that answer from our own documents. Ask Knowledge Box about a policy, or Brand Box for the latest logo and guidelines, and you get an answer in seconds. Both open with your company Microsoft account, so there is no separate password, and access ends automatically when someone leaves.',
+      'Brand Box went live: an assistant that answers from our own brand documents. Ask it for the latest logo or guidelines and you get an answer in seconds. It opens with your company Microsoft account, so there is no separate password, and access ends automatically when someone leaves.',
       'Behind the scenes, our HR system (MenaITech) now keeps Active Directory up to date on its own. Every six hours, changes HR makes reach your company account: 4,095 active employees across nine group companies are read, and 169 out-of-date fields were corrected along the way. Next, HR-approved employee photos will flow to Outlook and Teams the same way.',
       'ManageEngine is now our single front door for support. IT, Transformation and Business Applications requests all go through one portal, so every request is tracked and nothing gets lost in email.',
       'The NEWKAIRO website launched on our own platform and is the first result on Google for “newkairo”, straight after the sponsored results. Enquiries from the site arrive in Salesforce as verified leads, and the content is edited in-house.',
       'Still in motion: a unified WhatsApp platform for the group (built, waiting on a company number), direct SMS through Orange (waiting on approvals), the new contracts cycle (second round of user testing), and a delivery-tracking app built by our interns that gives security a live record of couriers inside the compounds.',
     ],
     points: [
-      ['Knowledge Box', 'Ask about any policy or procedure and get an answer from our own documents.'],
+      ['Brand Box', 'Ask for the latest logo or guidelines and get an answer from our own brand documents.'],
       ['ManageEngine', 'One portal for every IT, Transformation and Business Applications request.'],
       ['NEWKAIRO online', 'Built in-house, first on Google, leads straight into Salesforce.'],
     ],
@@ -64,14 +63,13 @@ const sections = [
       block('steps', 12, {
         title: 'Live since last quarter',
         items: [
-          ['Knowledge Box', 'Policies and know-how, answered for any employee from our own documents. Company sign-in only.'],
           ['Brand Box', 'Brand assets and guidelines on request, so teams stop asking around for the latest logo.'],
           ['MenaITech → Active Directory', 'Your account details follow HR’s records automatically, every six hours.'],
           ['NEWKAIRO website', 'Launched on our own platform with verified lead capture into Salesforce.'],
           ['ManageEngine', 'The central IT service desk for support, enhancement and application requests.'],
         ],
       }),
-      block('link', 4, { tag: 'Platform', title: 'Knowledge Box', desc: 'Ask a question about any company policy.', url: LINKS.knowledgeBox, cta: 'Open Knowledge Box' }, 2),
+      block('link', 4, { tag: 'Platform', title: 'Brand Box', desc: 'Find the latest logos, guidelines and templates.', url: LINKS.brandBox, cta: 'Open Brand Box' }, 2),
       block('link', 4, { tag: 'Support', title: 'ManageEngine', desc: 'Raise and track IT and application requests.', url: LINKS.itSupport, cta: 'Open the service desk' }, 2),
       block('link', 4, { tag: 'Launch', title: 'NEWKAIRO.com', desc: 'See the new site, built and run in-house.', url: LINKS.newkairo, cta: 'Visit the site' }, 2),
     ],
@@ -378,7 +376,7 @@ const sections = [
     body: [
       'Every week the Transformation Office shares an AI tip: one use case, one technique, something you can try in five minutes. Here are the ones that saved people the most time this quarter.',
       'The pattern behind every good prompt is the same: say who the answer is for, give the context, ask for a format, and set the length. The prompts below follow it, so copy one, paste your own material where it says, and adjust.',
-      'Our own AI is growing too. Knowledge Box answers policy questions from our documents, and the team is now testing a new kind of small, fast model that checks and routes routine decisions so a person only looks at the ones that need judgement.',
+      'Our own AI is growing too. Brand Box answers brand questions from our own guidelines, and the team is now testing a new kind of small, fast model that checks and routes routine decisions so a person only looks at the ones that need judgement.',
     ],
     points: [
       ['Who', 'Tell AI who the answer is for.'],
@@ -407,7 +405,7 @@ const sections = [
         note: '',
       }, 4),
       block('note', 8, { title: 'Use AI responsibly', text: RESPONSIBLE_AI }, 2),
-      block('link', 4, { tag: 'More tips', title: 'Ask Knowledge Box', desc: 'Find policies and know-how from our own documents.', url: LINKS.knowledgeBox, cta: 'Open' }, 2),
+      block('link', 4, { tag: 'Try it', title: 'Ask Brand Box', desc: 'Get logos and brand guidelines from our own documents.', url: LINKS.brandBox, cta: 'Open' }, 2),
     ],
   },
 
@@ -479,7 +477,7 @@ export default {
     glance: {
       label: 'This quarter, try this',
       items: [
-        { value: 'Ask', label: 'Knowledge Box', note: 'Get answers on any policy from our own documents.', url: LINKS.knowledgeBox },
+        { value: 'Ask', label: 'Brand Box', note: 'Get the latest logos and guidelines in seconds.', url: LINKS.brandBox },
         { value: 'Submit', label: 'Your employee photo', note: 'Refresh your badge and your Outlook and Teams profile.', url: LINKS.hrPortal },
         { value: 'Raise', label: 'Any IT request', note: 'One portal for IT, Transformation and Business Applications.', url: LINKS.itSupport },
         { value: 'Try', label: 'An AI prompt', note: 'Copy, paste your material, and save time today.', slug: 'ai-corner' },

@@ -35,13 +35,12 @@ Section headers carry buttons (`links` in each section) and link cards open in a
 
 | Link | Address | Where |
 |---|---|---|
-| Knowledge Box | SharePoint /sites/KnowledgeBox (company sign-in) | 01, 08 |
 | IT service desk (ManageEngine) | itsupport.thegdevelopments.com | 01 |
 | NEWKAIRO website | www.newkairo.com/en | 01, 02 |
 | Our projects | www.thegdevelopments.com/community | 02 |
 | Careers portal | careers.thegdevelopments.com | 04 |
 | HR portal | hrp.thegdevelopments.com | 04 |
-| Brand Box | SharePoint /sites/BrandBox (company sign-in) | 07 |
+| Brand Box | SharePoint /sites/BrandBox (company sign-in) | 01, 07, 08 |
 | G Developments Brand Guidelines (Feb 2026, PDF) | Brand Box › Branding Elements › GuideLines | 07 |
 
 Links still wanted:
