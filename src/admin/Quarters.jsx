@@ -1,62 +1,76 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { supabase, errorText } from '../lib/supabase.js'
 import { btnCls, Field, ghostCls } from './fields.jsx'
+import { isLive, isScheduled } from '../lib/edition.js'
 
 const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 export default function Quarters() {
-  const [list, setList] = useState([])
+  const [list, setList] = useState(null)
+  const [votes, setVotes] = useState({})
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const nav = useNavigate()
 
-  const load = () => supabase.from('quarters').select('*').order('sort', { ascending: false }).then(({ data }) => setList(data || []))
+  const load = async () => {
+    const [q, v] = await Promise.all([
+      supabase.from('quarters').select('*').order('sort', { ascending: false }),
+      supabase.rpc('poll_results'),
+    ])
+    if (q.error) return setError(`Could not load editions: ${errorText(q.error)}`)
+    setList(q.data)
+    const byQ = {}
+    ;(v.data || []).forEach((r) => { (byQ[r.quarter_id] ||= []).push(r) })
+    setVotes(byQ)
+  }
   useEffect(() => { load() }, [])
 
-  const togglePublish = async (q) => {
-    await supabase.from('quarters').update({ is_published: !q.is_published }).eq('id', q.id)
+  // Runs a write, then reloads; any failure is shown instead of being silently ignored.
+  const run = async (fn) => {
+    setError('')
+    const { error: err } = await fn()
+    if (err) setError(errorText(err))
     load()
   }
-
-  const remove = async (q) => {
-    if (!confirm(`Delete ${q.label} and all its sections? This cannot be undone.`)) return
-    await supabase.from('quarters').delete().eq('id', q.id)
-    load()
+  const togglePublish = (q) => {
+    const live = isLive(q)
+    if (!confirm(live ? `Unpublish ${q.label}? Readers will no longer see it.` : `Publish ${q.label} now? Readers will see it immediately.`)) return
+    run(() => supabase.from('quarters').update(live ? { is_published: false, publish_at: null } : { is_published: true }).eq('id', q.id))
+  }
+  const remove = (q) => {
+    if (!confirm(`Delete ${q.label} and all its sections and poll votes? This cannot be undone.`)) return
+    run(() => supabase.from('quarters').delete().eq('id', q.id))
   }
 
-  // Creates a quarter as a copy of an existing one (content, sections and grid blocks).
+  // Creates a draft as a full copy of an existing edition (content, sections, grids) in one transaction.
   const create = async () => {
-    setBusy(true)
-    const src = list.find((q) => q.id === form.copyFrom) || list[0]
-    const sort = Math.max(0, ...list.map((q) => q.sort)) + 1
-    const { data: q, error } = await supabase.from('quarters').insert({
-      slug: slugify(form.label), label: form.label, title: form.title,
-      issue_no: Number(form.issue) || list.length + 1, sort, is_published: false,
-      content: src?.content || {},
-    }).select().single()
-    if (error) { alert(error.message); return setBusy(false) }
-
-    if (src) {
-      const { data: secs } = await supabase.from('sections').select('*').eq('quarter_id', src.id)
-      for (const s of secs || []) {
-        const { id: oldId, quarter_id, ...rest } = s
-        const { data: ns } = await supabase.from('sections').insert({ ...rest, quarter_id: q.id }).select().single()
-        const { data: blocks } = await supabase.from('section_blocks').select('*').eq('section_id', oldId)
-        if (blocks?.length && ns)
-          await supabase.from('section_blocks').insert(blocks.map(({ id, section_id, ...b }) => ({ ...b, section_id: ns.id })))
-      }
-    }
+    setBusy(true); setError('')
+    const slug = slugify(form.label)
+    if (list.some((q) => q.slug === slug)) { setBusy(false); return setError(`An edition with the link /q/${slug} already exists. Choose another label.`) }
+    const { data: id, error: err } = await supabase.rpc('copy_quarter', {
+      p_source: form.copyFrom || null, p_slug: slug, p_label: form.label.trim(), p_title: form.title.trim(),
+      p_issue: Math.max(1, parseInt(form.issue, 10) || list.length + 1),
+    })
     setBusy(false)
-    nav(`/admin?q=${q.id}`)
+    if (err) return setError(`Could not create the edition: ${errorText(err)}`)
+    nav(`/admin?q=${id}`)
   }
+
+  if (!list)
+    return error
+      ? <div className="mx-auto max-w-4xl space-y-4"><p className="text-[13px] text-red-700">{error}</p><button className={btnCls} onClick={() => { setError(''); load() }}>Try again</button></div>
+      : <p className="text-center text-[13px] text-neutral-500">Loading…</p>
 
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-[22px] font-semibold tracking-tight">Quarters</h1>
-        <button className={btnCls} onClick={() => setForm({ label: '', title: '', issue: list.length + 1, copyFrom: list[0]?.id })}>+ New quarter</button>
+        <button className={btnCls} disabled={!list.length} title={list.length ? '' : 'Run supabase/schema.sql to create the first edition'} onClick={() => setForm({ label: '', title: '', issue: list.length + 1, copyFrom: list[0].id })}>+ New quarter</button>
       </div>
+
+      {error && <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-700">{error}</p>}
 
       {form && (
         <div className="mb-6 space-y-4 rounded-xl border border-neutral-200 bg-white p-5">
@@ -73,7 +87,7 @@ export default function Quarters() {
             </select>
           </label>
           <div className="flex gap-2">
-            <button className={btnCls} disabled={!form.label || !form.title || busy} onClick={create}>{busy ? 'Creating…' : 'Create draft'}</button>
+            <button className={btnCls} disabled={!slugify(form.label) || !form.title.trim() || busy} onClick={create}>{busy ? 'Creating…' : 'Create draft'}</button>
             <button className={ghostCls} onClick={() => setForm(null)}>Cancel</button>
           </div>
           <p className="text-[11px] text-neutral-500">The new quarter is a draft copy. Edit it, then publish when ready.</p>
@@ -81,19 +95,28 @@ export default function Quarters() {
       )}
 
       <div className="divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white">
-        {list.map((q) => (
-          <div key={q.id} className="flex items-center gap-4 p-4">
-            <div className="min-w-0 flex-1">
-              <Link to={`/admin?q=${q.id}`} className="text-[14px] font-medium hover:underline">{q.label} — {q.title}</Link>
-              <p className="text-[11px] text-neutral-500">/q/{q.slug} · Issue {q.issue_no}</p>
+        {list.map((q) => {
+          const v = votes[q.id] || []
+          const total = v.reduce((n, r) => n + Number(r.votes), 0)
+          return (
+            <div key={q.id} className="flex flex-wrap items-center gap-4 p-4">
+              <div className="min-w-0 flex-1">
+                <Link to={`/admin?q=${q.id}`} className="text-[14px] font-medium hover:underline">{q.label} — {q.title}</Link>
+                <p className="text-[11px] text-neutral-500">/q/{q.slug} · Issue {q.issue_no}</p>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  Poll: {total ? `${total} vote${total === 1 ? '' : 's'} — ${v.map((r) => `${r.choice} ${Math.round((r.votes / total) * 100)}%`).join(' · ')}` : 'no votes yet'}
+                </p>
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${isLive(q) ? 'bg-emerald-100 text-emerald-800' : isScheduled(q) ? 'bg-sky-100 text-sky-800' : 'bg-neutral-200 text-neutral-700'}`}>
+                {isLive(q) ? 'Live' : isScheduled(q) ? `Scheduled · ${new Date(q.publish_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Draft'}
+              </span>
+              <a href={`/q/${q.slug}`} target="_blank" rel="noreferrer" className={ghostCls}>View</a>
+              <button className={ghostCls} onClick={() => togglePublish(q)}>{isLive(q) ? 'Unpublish' : 'Publish now'}</button>
+              <Link to={`/admin?q=${q.id}`} className={ghostCls}>Edit</Link>
+              <button className="text-[11px] text-red-600" onClick={() => remove(q)}>Delete</button>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${q.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-neutral-200 text-neutral-700'}`}>{q.is_published ? 'Published' : 'Draft'}</span>
-            <a href={`/q/${q.slug}`} target="_blank" rel="noreferrer" className={ghostCls}>View</a>
-            <button className={ghostCls} onClick={() => togglePublish(q)}>{q.is_published ? 'Unpublish' : 'Publish'}</button>
-            <Link to={`/admin?q=${q.id}`} className={ghostCls}>Edit</Link>
-            <button className="text-[11px] text-red-600" onClick={() => remove(q)}>Delete</button>
-          </div>
-        ))}
+          )
+        })}
         {!list.length && <p className="p-6 text-[13px] text-neutral-500">No quarters yet.</p>}
       </div>
     </div>

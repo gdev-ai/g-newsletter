@@ -1,5 +1,5 @@
 export const DEFAULT_DESIGN = {
-  paper: '#f1f0ec', stone: '#d9d8d2', ink: '#111111', soot: '#3b3b3b',
+  paper: '#f1f0ec', home: '#ffffff', stone: '#d9d8d2', ink: '#111111', soot: '#3b3b3b',
   fontDisplay: 'Manrope', fontBody: 'Inter',
 }
 
@@ -18,7 +18,7 @@ const channels = (hex) => {
 export function applyTheme(d = {}) {
   const t = { ...DEFAULT_DESIGN, ...d }
   const root = document.documentElement.style
-  ;['paper', 'stone', 'ink', 'soot'].forEach((k) => root.setProperty(`--c-${k}`, channels(t[k])))
+  ;['paper', 'home', 'stone', 'ink', 'soot'].forEach((k) => root.setProperty(`--c-${k}`, channels(t[k])))
   root.setProperty('--font-display', `'${t.fontDisplay}'`)
   root.setProperty('--font-body', `'${t.fontBody}'`)
 

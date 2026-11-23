@@ -3,14 +3,22 @@ import Journal from './Journal.jsx'
 import Section from './Section.jsx'
 import Admin from './admin/Admin.jsx'
 import { ScrollManager } from './Chrome.jsx'
-import { SiteProvider, useQuarterData } from './lib/site.jsx'
+import { StatusScreen } from './shared.jsx'
+import { EditionScope, SiteProvider, useQuarterData, useSite } from './lib/site.jsx'
 
 function QuarterPage({ page: Page }) {
   const { q } = useParams()
-  const { loading, quarter, sections } = useQuarterData(q)
-  if (loading) return <div className="min-h-screen bg-ink" />
-  if (!quarter) return <div className="grid min-h-screen place-items-center bg-ink text-[11px] uppercase tracking-label text-white/60">Edition not found</div>
-  return <Page quarter={quarter} sections={sections} base={`/q/${quarter.slug}`} />
+  const site = useSite()
+  const { loading, error, quarter, sections, retry } = useQuarterData(q)
+  if (site.error) return <StatusScreen title="The journal could not be loaded" detail={site.error} onRetry={site.retry} />
+  if (error) return <StatusScreen title="This edition could not be loaded" detail={error} onRetry={retry} />
+  if (site.loading || loading) return <StatusScreen title="Loading" busy />
+  if (!quarter) return <StatusScreen title="Edition not found" />
+  return (
+    <EditionScope quarter={quarter}>
+      <Page quarter={quarter} sections={sections} base={`/q/${quarter.slug}`} />
+    </EditionScope>
+  )
 }
 
 export default function App() {

@@ -1,22 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { supabase, errorText } from '../lib/supabase.js'
+import { PLACEHOLDERS, isLive, isScheduled, withContentDefaults } from '../lib/edition.js'
 import { getIn, setIn } from '../lib/cms.js'
 import { DEFAULT_DESIGN, FONT_CHOICES } from '../lib/theme.js'
-import { DEFAULT_BRAND, useSite } from '../lib/site.jsx'
-import { btnCls, Field, ghostCls, ImageField, JsonForm, Label } from './fields.jsx'
+import { DEFAULT_BRAND, listQuarters, useSite } from '../lib/site.jsx'
+import { btnCls, Field, ghostCls, ImageField, JsonForm, Label, pretty, SectionPicker } from './fields.jsx'
 import GridEditor from './GridEditor.jsx'
 
 const GROUPS = [
   ['hero', 'Hero'], ['intro', 'Editor’s note'], ['stories', 'Quarterly highlights'], ['directory', 'Section directory'],
   ['ai', 'AI Corner'], ['poll', 'Poll'], ['challenge', 'Take a break'], ['archive', 'Archive'], ['images', 'All images'],
 ]
-const COLORS = [['paper', 'Page background'], ['stone', 'Panel background'], ['ink', 'Text & dark sections'], ['soot', 'Secondary text']]
+const COLORS = [['home', 'Home page background'], ['paper', 'Reading page background'], ['stone', 'Panel background'], ['ink', 'Text & dark sections'], ['soot', 'Secondary text']]
 const DEVICES = { desktop: '100%', tablet: '768px', mobile: '390px' }
 const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 const human = (k) => k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
-const isImagePath = (p) => /(^|\.)images\./.test(p) || /photo_url$|logoUrl$/.test(p)
+const isImagePath = (p) => /(^|\.)images\./.test(p) || /photo_url$|logoUrl$|imageUrl$/.test(p)
 const clone = (x) => JSON.parse(JSON.stringify(x))
+// <input type="datetime-local"> works in local time without a zone; the database stores UTC.
+const toLocalInput = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+const fromLocalInput = (v) => (v ? new Date(v).toISOString() : null)
+const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+function StatusBadge({ q }) {
+  if (q.is_published) return <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-800">Live</span>
+  if (isLive(q)) return <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-800" title={`Went live ${when(q.publish_at)}`}>Live (scheduled)</span>
+  if (isScheduled(q)) return <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-medium text-sky-800" title={when(q.publish_at)}>Scheduled · {when(q.publish_at)}</span>
+  return <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-700">Draft</span>
+}
+
+const IMAGE_KEYS = ['hero', 'transform', 'ai', 'challenge']
+// Story card photos now live on each card (Quarterly highlights → Story card → Image).
+const CARD_IMAGE_KEYS = ['walkway', 'people', 'blocks']
 
 function Row({ title, hint, onClick }) {
   return (
@@ -40,6 +60,15 @@ export default function Editor({ email, onSignOut }) {
   const [selBlock, setSelBlock] = useState(null)
   const [device, setDevice] = useState('desktop')
   const [status, setStatus] = useState('')
+  const [toast, setToast] = useState(null) // { text, tone }
+  const toastTimer = useRef(0)
+  const notify = useCallback((text, tone = 'ok', ms = 3500) => {
+    clearTimeout(toastTimer.current)
+    setToast({ text, tone })
+    if (ms) toastTimer.current = setTimeout(() => setToast(null), ms)
+  }, [])
+  const [loadError, setLoadError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const iframe = useRef(null)
   const snap = useRef(null)
   const draftRef = useRef(null)
@@ -48,46 +77,93 @@ export default function Editor({ email, onSignOut }) {
   selRef.current = selPath
 
   const dirty = draft && snap.current && JSON.stringify(draft) !== JSON.stringify(snap.current)
+  const dirtyRef = useRef(false)
+  dirtyRef.current = !!dirty
 
+  // ---- undo history ----
+  // Each burst of edits (changes less than 700ms apart, e.g. typing a word) becomes one undo step.
+  const hist = useRef({ past: [], future: [], last: null, at: 0, skip: false })
+  const [, rerender] = useState(0)
+  useEffect(() => {
+    const h = hist.current
+    if (!draft) return
+    if (h.skip || !h.last) { h.skip = false; h.last = draft; return }
+    if (h.last === draft) return
+    const now = Date.now()
+    if (now - h.at > 700) { h.past.push(h.last); if (h.past.length > 100) h.past.shift() }
+    h.at = now
+    h.future = []
+    h.last = draft
+    rerender((n) => n + 1)
+  }, [draft])
+  const undo = useCallback(() => {
+    const h = hist.current
+    if (!h.past.length) return
+    h.future.push(draftRef.current); h.skip = true; h.at = 0
+    setDraft(h.past.pop()); rerender((n) => n + 1)
+  }, [])
+  const redo = useCallback(() => {
+    const h = hist.current
+    if (!h.future.length) return
+    h.past.push(draftRef.current); h.skip = true; h.at = 0
+    setDraft(h.future.pop()); rerender((n) => n + 1)
+  }, [])
+
+  // Loads an edition into the editor; returns an error message instead of throwing.
   const loadDraft = useCallback(async (id) => {
-    const [{ data: quarter }, { data: sections }, { data: settings }] = await Promise.all([
-      supabase.from('quarters').select('*').eq('id', id).single(),
-      supabase.from('sections').select('*').eq('quarter_id', id).order('position'),
-      supabase.from('site_settings').select('key,value'),
-    ])
-    const ids = (sections || []).map((s) => s.id)
-    const { data: blocks } = ids.length ? await supabase.from('section_blocks').select('*').in('section_id', ids).order('position') : { data: [] }
-    const byS = Object.fromEntries(ids.map((i) => [i, []]))
-    ;(blocks || []).forEach((b) => byS[b.section_id].push(b))
-    const val = (k, d) => ({ ...d, ...(settings?.find((s) => s.key === k)?.value || {}) })
-    const d = { quarter, sections: sections || [], blocks: byS, design: val('design', DEFAULT_DESIGN), brand: val('brand', DEFAULT_BRAND) }
-    snap.current = clone(d)
-    setLoadedSlug(quarter.slug)
-    setDraft(d)
+    try {
+      const [q, s, st] = await Promise.all([
+        supabase.from('quarters').select('*').eq('id', id).single(),
+        supabase.from('sections').select('*').eq('quarter_id', id).order('position'),
+        supabase.from('site_settings').select('key,value'),
+      ])
+      if (q.error || s.error || st.error) throw q.error || s.error || st.error
+      const ids = s.data.map((x) => x.id)
+      const b = ids.length ? await supabase.from('section_blocks').select('*').in('section_id', ids).order('position') : { data: [] }
+      if (b.error) throw b.error
+      const byS = Object.fromEntries(ids.map((i) => [i, []]))
+      b.data.forEach((x) => byS[x.section_id].push(x))
+      const val = (k, d) => ({ ...d, ...(st.data.find((x) => x.key === k)?.value || {}) })
+      const d = { quarter: { ...q.data, content: withContentDefaults(q.data.content) }, sections: s.data, blocks: byS, design: val('design', DEFAULT_DESIGN), brand: val('brand', DEFAULT_BRAND) }
+      snap.current = clone(d)
+      hist.current = { past: [], future: [], last: null, at: 0, skip: false }
+      setLoadedSlug(q.data.slug)
+      setDraft(d)
+      setLoadError('')
+      return ''
+    } catch (e) {
+      const msg = errorText(e)
+      if (!draftRef.current) setLoadError(msg)
+      return msg
+    }
   }, [])
 
   useEffect(() => {
-    supabase.from('quarters').select('id,slug,label,title,is_published,sort').order('sort', { ascending: false }).then(({ data }) => {
-      setQuarters(data || [])
-      const first = params.get('q') || data?.[0]?.id
+    listQuarters('id,slug,label,title,is_published,sort').then(({ data, error }) => {
+      if (error) return setLoadError(errorText(error))
+      setQuarters(data)
+      const first = params.get('q') || data[0]?.id
       if (first) setQid(first)
+      else setLoadError('There are no editions yet. Create one on the Quarters page.')
     })
-  }, [])
+  }, [attempt])
   useEffect(() => { if (qid) { setPage('home'); setStack([{ name: 'root' }]); setSelPath(null); loadDraft(qid) } }, [qid, loadDraft])
 
-  // ---- preview bridge ----
+  // ---- preview bridge (same-origin only) ----
   const send = useCallback(() => {
     const w = iframe.current?.contentWindow
     if (!w || !draftRef.current) return
-    w.postMessage({ type: 'cms:state', state: draftRef.current }, '*')
-    w.postMessage({ type: 'cms:selected', path: selRef.current }, '*')
+    w.postMessage({ type: 'cms:state', state: draftRef.current }, window.location.origin)
+    w.postMessage({ type: 'cms:selected', path: selRef.current }, window.location.origin)
   }, [])
   useEffect(() => { send() }, [draft, selPath, send])
 
   useEffect(() => {
     const on = (e) => {
+      if (e.origin !== window.location.origin || e.source !== iframe.current?.contentWindow) return
       if (e.data?.type === 'cms:ready') send()
       if (e.data?.type === 'cms:select') select(e.data.path)
+      if (e.data?.type === 'cms:key') shortcutRef.current?.(e.data.key, e.data.shift)
     }
     window.addEventListener('message', on)
     return () => window.removeEventListener('message', on)
@@ -124,56 +200,110 @@ export default function Editor({ email, onSignOut }) {
   const back = () => { setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)); setSelPath(null) }
 
   // ---- save ----
-  const save = async () => {
+  // The edition (quarter, sections and grids) is written by one database function, so a save
+  // either fully succeeds or changes nothing. Global design/brand settings are separate upserts.
+  const save = async (d = draftRef.current, okText = 'Saved') => {
+    if (status === 'Saving…') return
     setStatus('Saving…')
-    const s0 = snap.current, d = draft
-    const errs = []
+    const s0 = snap.current
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-    if (!same(d.quarter, s0.quarter)) {
-      const { label, title, issue_no, slug, content, is_published } = d.quarter
-      const r = await supabase.from('quarters').update({ label, title, issue_no: Number(issue_no) || 1, slug, content, is_published, updated_at: new Date().toISOString() }).eq('id', qid)
-      if (r.error) errs.push(r.error.message)
+    const errs = []
+    const editionChanged = !same(d.quarter, s0.quarter) || !same(d.sections, s0.sections) || !same(d.blocks, s0.blocks)
+    if (editionChanged) {
+      const q = { ...d.quarter, issue_no: Math.max(1, parseInt(d.quarter.issue_no, 10) || 1) }
+      const sections = d.sections.map((s, i) => ({
+        ...s, position: i + 1, read_min: Math.max(1, parseInt(s.read_min, 10) || 1),
+        blocks: (d.blocks[s.id] || []).map(({ id, type, col_span, row_span, content }) => ({ id, type, col_span, row_span, content })),
+      }))
+      const { error } = await supabase.rpc('save_edition', { p_quarter: q, p_sections: sections })
+      if (error) errs.push(errorText(error))
     }
-    for (const s of d.sections) {
-      const old = s0.sections.find((x) => x.id === s.id)
-      if (!same(s, old)) {
-        const { id, quarter_id, ...f } = s
-        const r = await supabase.from('sections').update({ ...f, read_min: Number(s.read_min) || 1 }).eq('id', id)
-        if (r.error) errs.push(r.error.message)
-      }
-      if (!same(d.blocks[s.id], s0.blocks[s.id])) {
-        await supabase.from('section_blocks').delete().eq('section_id', s.id)
-        const rows = (d.blocks[s.id] || []).map((b, i) => ({ section_id: s.id, position: i + 1, type: b.type, col_span: b.col_span, row_span: b.row_span, content: b.content }))
-        if (rows.length) { const r = await supabase.from('section_blocks').insert(rows); if (r.error) errs.push(r.error.message) }
-      }
-    }
-    for (const k of ['design', 'brand'])
-      if (!same(d[k], s0[k])) {
-        const r = await supabase.from('site_settings').upsert({ key: k, value: d[k], updated_at: new Date().toISOString() })
-        if (r.error) errs.push(r.error.message)
-      }
-    if (errs.length) setStatus(errs[0])
-    else { await loadDraft(qid); site.reload(); setStatus('Saved ✓') }
-    setTimeout(() => setStatus(''), 3000)
+    if (!errs.length)
+      for (const k of ['design', 'brand'])
+        if (!same(d[k], s0[k])) {
+          const r = await supabase.from('site_settings').upsert({ key: k, value: d[k], updated_at: new Date().toISOString() })
+          if (r.error) errs.push(errorText(r.error))
+        }
+    if (errs.length) { setStatus(''); notify(`Not saved: ${errs[0]}`, 'error', 0); return false }
+    // New sections got real ids on save; keep the editor on the same page.
+    const onNewSection = page !== 'home' && !s0.sections.some((s) => s.id === page)
+    const reloadError = await loadDraft(qid)
+    if (onNewSection) { setPage('home'); setStack([{ name: 'root' }, { name: 'sections' }]) }
+    site.reload()
+    setStatus('')
+    setQuarters((list) => list.map((x) => (x.id === d.quarter.id ? { ...x, ...d.quarter } : x)))
+    if (reloadError) notify(`Saved, but reloading failed: ${reloadError}`, 'error', 0)
+    else notify(`${okText} ✓`)
+    return true
+  }
+  const saveRef = useRef(save)
+  saveRef.current = save
+
+  // Publishing is explicit and saves immediately (along with any other pending edits).
+  const live = isLive(draft?.quarter)
+  const setLive = () => {
+    const q = draft.quarter
+    const goingLive = !live
+    const msg = goingLive
+      ? `Publish ${q.label} now? Readers will see it immediately${dirty ? ', including your unsaved changes' : ''}.`
+      : `Unpublish ${q.label}? Readers will no longer see it${q.publish_at ? ', and its schedule is cleared' : ''}.`
+    if (!confirm(msg)) return
+    const d = { ...draft, quarter: { ...q, is_published: goingLive, publish_at: goingLive ? q.publish_at : null } }
+    setDraft(d)
+    save(d, goingLive ? 'Published' : 'Unpublished')
   }
 
-  const addSection = async () => {
-    const n = String(draft.sections.length + 1).padStart(2, '0')
-    const { data, error } = await supabase.from('sections').insert({
-      quarter_id: qid, slug: `section-${Date.now().toString(36)}`, n, position: draft.sections.length + 1, title: 'New section', short: 'New section',
-      descr: 'Short description.', headline: 'Headline goes here.', quote: 'A short pull quote.', points: [['Point one', ''], ['Point two', ''], ['Point three', '']], body: ['Write the opening paragraph.'],
-    }).select().single()
-    if (error) return alert(error.message)
-    snap.current = { ...snap.current, sections: [...snap.current.sections, clone(data)], blocks: { ...snap.current.blocks, [data.id]: [] } }
-    setDraft((d) => ({ ...d, sections: [...d.sections, data], blocks: { ...d.blocks, [data.id]: [] } }))
-    setPage(data.id); push({ name: 'section', sid: data.id })
+  // ---- guard against losing work ----
+  useEffect(() => {
+    const on = (e) => { if (dirtyRef.current) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', on)
+    return () => window.removeEventListener('beforeunload', on)
+  }, [])
+  const leaveOk = () => !dirtyRef.current || confirm('You have unsaved changes. Leave without saving?')
+
+  // ---- keyboard: Ctrl/Cmd+S saves, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes ----
+  const shortcut = useCallback((k, shift) => {
+    if (k === 's') { if (dirtyRef.current) saveRef.current(); return true }
+    if (k === 'z' && !shift) { undo(); return true }
+    if ((k === 'z' && shift) || k === 'y') { redo(); return true }
+    return false
+  }, [undo, redo])
+  const shortcutRef = useRef(shortcut)
+  shortcutRef.current = shortcut
+  useEffect(() => {
+    const on = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      if (shortcutRef.current(e.key.toLowerCase(), e.shiftKey)) e.preventDefault()
+    }
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
+
+  const discard = () => {
+    if (!confirm('Discard all unsaved changes?')) return
+    setDraft(clone(snap.current)); setSelPath(null); setSelBlock(null)
+    if (page !== 'home' && !snap.current.sections.some((s) => s.id === page)) { setPage('home'); setStack([{ name: 'root' }]) }
   }
-  const removeSection = async (sid) => {
-    if (!confirm('Delete this section? This cannot be undone.')) return
-    await supabase.from('sections').delete().eq('id', sid)
-    snap.current = { ...snap.current, sections: snap.current.sections.filter((s) => s.id !== sid) }
-    setDraft((d) => ({ ...d, sections: d.sections.filter((s) => s.id !== sid) }))
+
+  // Adding and removing sections only changes the draft; nothing is written until Save.
+  const addSection = () => {
+    const id = `new-${Date.now().toString(36)}`
+    const s = {
+      id, quarter_id: qid, slug: `section-${Date.now().toString(36)}`, n: String(draft.sections.length + 1).padStart(2, '0'),
+      position: draft.sections.length + 1, title: 'New section', short: 'New section', descr: 'Short description.',
+      headline: 'Headline goes here.', quote: 'A short pull quote.', photo_url: '', read_min: 1,
+      points: [['Point one', ''], ['Point two', ''], ['Point three', '']], body: ['Write the opening paragraph.'],
+    }
+    setDraft((d) => ({ ...d, sections: [...d.sections, s], blocks: { ...d.blocks, [id]: [] } }))
+    setPage(id); push({ name: 'section', sid: id })
+  }
+  const removeSection = (sid) => {
+    setDraft((d) => {
+      const { [sid]: _, ...blocks } = d.blocks
+      return { ...d, sections: d.sections.filter((s) => s.id !== sid), blocks }
+    })
     setPage('home'); setStack([{ name: 'root' }, { name: 'sections' }])
+    notify('Section removed — Save to apply, or Undo (Ctrl+Z) to bring it back', 'info', 5000)
   }
   const moveSection = (i, dir) => setDraft((d) => {
     const j = i + dir
@@ -193,6 +323,19 @@ export default function Editor({ email, onSignOut }) {
     return `${base}/section/${s?.slug || 'x'}?cms=1&sid=${page}`
   }, [loadedSlug, page])
 
+  if (!draft && loadError)
+    return (
+      <div className="grid h-screen place-items-center bg-neutral-100 p-6 text-center font-sans">
+        <div className="space-y-4">
+          <p className="text-[14px] text-neutral-800">The editor could not load.</p>
+          <p className="text-[12px] text-neutral-500">{loadError}</p>
+          <div className="flex justify-center gap-2">
+            <button className={btnCls} onClick={() => { setLoadError(''); qid ? loadDraft(qid) : setAttempt((n) => n + 1) }}>Try again</button>
+            <Link to="/admin/quarters" className={ghostCls}>Quarters</Link>
+          </div>
+        </div>
+      </div>
+    )
   if (!draft) return <div className="grid h-screen place-items-center bg-neutral-100 text-[13px] text-neutral-500">Loading editor…</div>
   const sections = draft.sections
 
@@ -209,25 +352,47 @@ export default function Editor({ email, onSignOut }) {
           <Row title="Design & colors" hint="Colors and fonts" onClick={() => push({ name: 'design' })} />
           <Row title="Brand & footer" hint="Wordmark, logo, footer text" onClick={() => push({ name: 'brand' })} />
           <Row title="Edition details" hint="Label, title, issue number, link" onClick={() => push({ name: 'details' })} />
-          <p className="px-4 py-4 text-[11px] text-neutral-500">Tip: click any text or image in the preview to edit it here.</p>
+          <p className="px-4 pt-4 text-[11px] text-neutral-500">Tip: click any text or image in the preview to edit it here.</p>
+          <p className="px-4 py-2 text-[11px] text-neutral-500">
+            Write {PLACEHOLDERS.map((p, i) => <span key={p}>{i ? ', ' : ''}<code className="rounded bg-neutral-200 px-1">{p}</code></span>)} in any text to show this edition’s issue number, label or title — they stay correct when an edition is copied.
+          </p>
         </div>
       )
 
     if (cur.name === 'home')
       return <div>{GROUPS.map(([k, l]) => <Row key={k} title={l} onClick={() => push({ name: 'group', key: k })} />)}</div>
 
+    if (cur.name === 'group' && cur.key === 'images') {
+      const c = draft.quarter.content
+      return (
+        <div className="space-y-6 p-4">
+          <p className="text-[12px] text-neutral-500">Story card photos are set on each card under Home page → Quarterly highlights.</p>
+          {Object.keys({ ...Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])), ...c.images }).filter((k) => !CARD_IMAGE_KEYS.includes(k)).map((k) => (
+            <ImageField
+              key={k} label={pretty(k)} value={c.images?.[k]} onChange={(v) => setPath(`c.images.${k}`, v)}
+              alt={c.imageAlts?.[k]} onAlt={(v) => setPath(`c.imageAlts.${k}`, v)}
+            />
+          ))}
+        </div>
+      )
+    }
+
     if (cur.name === 'group')
-      return <div className="p-4"><JsonForm value={draft.quarter.content[cur.key]} name={cur.key} onChange={(v) => setPath(`c.${cur.key}`, v)} /></div>
+      return <div className="p-4"><JsonForm value={draft.quarter.content[cur.key]} name={cur.key} sections={sections} onChange={(v) => setPath(`c.${cur.key}`, v)} /></div>
 
     if (cur.name === 'edit') {
       const path = cur.path
       const val = getPath(path)
       const keys = path.split('.')
-      const label = human(keys[keys.length - 1] === '0' || /^\d+$/.test(keys[keys.length - 1]) ? keys[keys.length - 2] : keys[keys.length - 1])
+      const label = pretty(keys[keys.length - 1] === '0' || /^\d+$/.test(keys[keys.length - 1]) ? keys[keys.length - 2] : keys[keys.length - 1])
       return (
         <div className="space-y-5 p-4">
-          {isImagePath(path)
+          {/^c\.images\./.test(path)
+            ? <ImageField label={pretty(keys[keys.length - 1])} value={val} onChange={(v) => setPath(path, v)} alt={draft.quarter.content.imageAlts?.[keys[2]]} onAlt={(v) => setPath(`c.imageAlts.${keys[2]}`, v)} />
+            : isImagePath(path)
             ? <ImageField label={label} value={val} onChange={(v) => setPath(path, v)} />
+            : /\.slug$/.test(path) && path.startsWith('c.')
+            ? <SectionPicker value={val} onChange={(v) => setPath(path, v)} sections={sections} />
             : <Field label={label} value={val} onChange={(v) => setPath(path, v)} multiline rows={Math.min(10, Math.max(3, Math.ceil(String(val ?? '').length / 40)))} />}
           {path.startsWith('c.') && <button className={ghostCls} onClick={() => push({ name: 'group', key: path.split('.')[1] })}>All {human(path.split('.')[1])} fields</button>}
           {path.startsWith('s.') && <button className={ghostCls} onClick={() => { setPage(path.split('.')[1]); push({ name: 'section', sid: path.split('.')[1] }) }}>Open full section editor</button>}
@@ -258,23 +423,23 @@ export default function Editor({ email, onSignOut }) {
       const f = (k) => ({ value: s[k], onChange: (v) => setPath(`s.${s.id}.${k}`, v) })
       return (
         <div className="space-y-5 p-4">
-          <Field label="Title (directory)" {...f('title')} multiline={false} />
-          <Field label="Short title" {...f('short')} multiline={false} />
+          <Field label="Title (in the section list)" {...f('title')} multiline={false} />
+          <Field label="Short title (next/previous links)" {...f('short')} multiline={false} />
           <Field label="Headline" {...f('headline')} />
-          <Field label="Description" {...f('descr')} />
-          <ImageField label="Cover photo" {...f('photo_url')} />
+          <Field label="Short description" {...f('descr')} />
+          <ImageField label="Cover photo (leave empty to hide)" {...f('photo_url')} />
           <div>
             <Label>Article paragraphs</Label>
             <JsonForm name="paragraph" value={s.body} onChange={(v) => setPath(`s.${s.id}.body`, v)} />
           </div>
-          <Field label="Pull quote" {...f('quote')} />
+          <Field label="Pull quote (leave empty to hide)" {...f('quote')} />
           <div>
             <Label>At a glance</Label>
             <div className="space-y-2">
               {s.points.map(([t, d], i) => (
                 <div key={i} className="space-y-1 rounded border border-neutral-200 p-2">
-                  <input className="w-full rounded border border-neutral-300 px-2 py-1.5 text-[12px]" value={t} onChange={(e) => setPath(`s.${s.id}.points.${i}.0`, e.target.value)} />
-                  <input className="w-full rounded border border-neutral-300 px-2 py-1.5 text-[12px]" value={d} onChange={(e) => setPath(`s.${s.id}.points.${i}.1`, e.target.value)} />
+                  <input aria-label={`Point ${i + 1} heading`} placeholder="Heading" className="w-full rounded border border-neutral-300 px-2 py-1.5 text-[12px]" value={t} onChange={(e) => setPath(`s.${s.id}.points.${i}.0`, e.target.value)} />
+                  <input aria-label={`Point ${i + 1} detail`} placeholder="Detail (optional)" className="w-full rounded border border-neutral-300 px-2 py-1.5 text-[12px]" value={d} onChange={(e) => setPath(`s.${s.id}.points.${i}.1`, e.target.value)} />
                   <button className="text-[11px] text-red-600" onClick={() => setPath(`s.${s.id}.points`, s.points.filter((_, j) => j !== i))}>Remove</button>
                 </div>
               ))}
@@ -290,8 +455,8 @@ export default function Editor({ email, onSignOut }) {
             />
           </div>
           <Field label="Read time (minutes)" {...f('read_min')} multiline={false} />
-          <Field label="URL slug" value={s.slug} onChange={(v) => setPath(`s.${s.id}.slug`, slugify(v))} multiline={false} />
-          <button className="text-[12px] text-red-600" onClick={() => removeSection(s.id)}>Delete this section</button>
+          <Field label="Page address (after /section/)" value={s.slug} onChange={(v) => setPath(`s.${s.id}.slug`, slugify(v))} multiline={false} />
+          <button className="text-[12px] text-red-600" onClick={() => removeSection(s.id)}>Remove this section</button>
         </div>
       )
     }
@@ -323,7 +488,7 @@ export default function Editor({ email, onSignOut }) {
     if (cur.name === 'brand')
       return (
         <div className="space-y-5 p-4">
-          {[['wordmark', 'Wordmark text'], ['headerTag1', 'Header tag'], ['footerNote1', 'Footer line 1'], ['footerNote2', 'Footer line 2'], ['copyright', 'Copyright']].map(([k, l]) => (
+          {[['wordmark', 'Wordmark text'], ['headerTag1', 'Header tag'], ['footerNote1', 'Footer line 1'], ['footerNote2', 'Footer line 2'], ['copyright', 'Copyright'], ['emailLabel', 'Footer email link text (empty hides it)'], ['photoCaption', 'Caption under section cover photos']].map(([k, l]) => (
             <Field key={k} label={l} value={draft.brand[k]} onChange={(v) => setPath(`brand.${k}`, v)} multiline={false} />
           ))}
           <ImageField label="Logo image (replaces wordmark)" value={draft.brand.logoUrl} onChange={(v) => setPath('brand.logoUrl', v)} />
@@ -336,7 +501,22 @@ export default function Editor({ email, onSignOut }) {
           <Field label="Label (e.g. Q1 2027)" value={draft.quarter.label} onChange={(v) => setPath('q.label', v)} multiline={false} />
           <Field label="Title" value={draft.quarter.title} onChange={(v) => setPath('q.title', v)} multiline={false} />
           <Field label="Issue number" value={draft.quarter.issue_no} onChange={(v) => setPath('q.issue_no', v)} multiline={false} />
-          <Field label="URL slug" value={draft.quarter.slug} onChange={(v) => setPath('q.slug', slugify(v))} multiline={false} />
+          <Field label="Page address (after /q/)" value={draft.quarter.slug} onChange={(v) => setPath('q.slug', slugify(v))} multiline={false} />
+          <div className="space-y-2 rounded-md border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between"><Label>Visibility</Label><StatusBadge q={draft.quarter} /></div>
+            {draft.quarter.is_published ? (
+              <p className="text-[12px] text-neutral-600">This edition is live. Use Unpublish in the top bar to hide it.</p>
+            ) : (
+              <label className="block">
+                <span className="mb-1 block text-[12px] text-neutral-600">Publish automatically at</span>
+                <div className="flex gap-2">
+                  <input type="datetime-local" className="flex-1 rounded-md border border-neutral-300 px-2 py-1.5 text-[13px]" value={toLocalInput(draft.quarter.publish_at)} onChange={(e) => setPath('q.publish_at', fromLocalInput(e.target.value))} />
+                  {draft.quarter.publish_at && <button className={ghostCls} onClick={() => setPath('q.publish_at', null)}>Clear</button>}
+                </div>
+                <span className="mt-1 block text-[11px] text-neutral-500">Your local time. Save to apply; it goes live at that moment with no further action.</span>
+              </label>
+            )}
+          </div>
         </div>
       )
     return null
@@ -356,7 +536,7 @@ export default function Editor({ email, onSignOut }) {
         <div className="flex-1 overflow-y-auto">{renderPanel()}</div>
         <div className="flex items-center justify-between border-t border-neutral-200 bg-white px-3 py-2 text-[11px] text-neutral-500">
           <span className="truncate">{email}</span>
-          <span className="flex gap-3"><Link to="/admin/quarters" className="hover:text-neutral-900">Quarters</Link><button onClick={onSignOut} className="hover:text-neutral-900">Sign out</button></span>
+          <span className="flex gap-3"><Link to="/admin/quarters" onClick={(e) => { if (!leaveOk()) e.preventDefault() }} className="hover:text-neutral-900">Quarters</Link><button onClick={() => leaveOk() && onSignOut()} className="hover:text-neutral-900">Sign out</button></span>
         </div>
       </aside>
 
@@ -364,7 +544,7 @@ export default function Editor({ email, onSignOut }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-300 bg-white px-4">
           <select className={sel} value={qid} onChange={(e) => { if (!dirty || confirm('Discard unsaved changes?')) setQid(e.target.value) }}>
-            {quarters.map((q) => <option key={q.id} value={q.id}>{q.label}{q.is_published ? '' : ' (draft)'}</option>)}
+            {quarters.map((q) => <option key={q.id} value={q.id}>{q.label}{isLive(q) ? '' : isScheduled(q) ? ' (scheduled)' : ' (draft)'}</option>)}
           </select>
           <select className={sel} value={page} onChange={(e) => { setPage(e.target.value); setSelPath(null) }}>
             <option value="home">Home page</option>
@@ -375,10 +555,18 @@ export default function Editor({ email, onSignOut }) {
               <button key={k} onClick={() => setDevice(k)} className={`px-2.5 py-1.5 text-[11px] capitalize ${device === k ? 'bg-neutral-900 text-white' : 'bg-white'}`}>{k}</button>
             ))}
           </div>
-          <span className="flex-1 text-right text-[12px] text-neutral-500">{status || (dirty ? 'Unsaved changes' : '')}</span>
-          <button className={ghostCls} onClick={() => setPath('q.is_published', !draft.quarter.is_published)}>{draft.quarter.is_published ? 'Published ✓' : 'Draft'}</button>
-          <a href={`/q/${loadedSlug}`} target="_blank" rel="noreferrer" className={ghostCls}>View live ↗</a>
-          <button className={btnCls} disabled={!dirty} onClick={save}>Save</button>
+          <div className="flex overflow-hidden rounded-md border border-neutral-300">
+            <button className="px-2.5 py-1.5 text-[12px] hover:bg-neutral-100 disabled:opacity-30" disabled={!hist.current.past.length} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+            <button className="border-l border-neutral-300 px-2.5 py-1.5 text-[12px] hover:bg-neutral-100 disabled:opacity-30" disabled={!hist.current.future.length} onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+          </div>
+          <span className="flex flex-1 items-center justify-end gap-2 text-[12px]">
+            {status ? <span className="text-neutral-500">{status}</span> : dirty ? <><i className="h-2 w-2 rounded-full bg-amber-500" /><span className="text-amber-800">Unsaved changes</span></> : <span className="text-neutral-400">All changes saved</span>}
+          </span>
+          <StatusBadge q={draft.quarter} />
+          <button className={ghostCls} disabled={status === 'Saving…'} onClick={setLive}>{live ? 'Unpublish' : 'Publish now'}</button>
+          <a href={`/q/${loadedSlug}`} target="_blank" rel="noreferrer" className={ghostCls}>{live ? 'View live ↗' : 'Open page ↗'}</a>
+          {dirty && <button className={ghostCls} onClick={discard}>Discard</button>}
+          <button className={btnCls} disabled={!dirty || status === 'Saving…'} onClick={() => save()} title="Save (Ctrl+S)">Save</button>
         </div>
         <div className="flex min-h-0 flex-1 justify-center overflow-auto p-0">
           <iframe
@@ -391,6 +579,12 @@ export default function Editor({ email, onSignOut }) {
             className="h-full max-w-full border-0 bg-white shadow-lg transition-[width] duration-300"
           />
         </div>
+        {toast && (
+          <div role={toast.tone === 'error' ? 'alert' : 'status'} className={`fixed bottom-5 right-5 z-50 flex max-w-[420px] items-start gap-3 rounded-lg px-4 py-3 text-[13px] shadow-xl ${toast.tone === 'error' ? 'bg-red-700 text-white' : toast.tone === 'info' ? 'bg-neutral-800 text-white' : 'bg-emerald-700 text-white'}`}>
+            <span className="flex-1">{toast.text}</span>
+            <button className="opacity-70 hover:opacity-100" aria-label="Dismiss" onClick={() => setToast(null)}>✕</button>
+          </div>
+        )}
       </div>
     </div>
   )

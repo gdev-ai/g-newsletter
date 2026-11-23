@@ -1,26 +1,37 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Arrow, Lines, Photo, Reveal } from './shared.jsx'
+import { Arrow, Lines, Photo, Reveal, useMeta } from './shared.jsx'
 import { Header, Footer } from './Chrome.jsx'
 import { useSite } from './lib/site.jsx'
-import { cms } from './lib/cms.js'
+import { cms, isCms } from './lib/cms.js'
+import { supabase } from './lib/supabase.js'
+import { isLive, pad2 } from './lib/edition.js'
 
-const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+// Alt text editors set per image in the CMS (content.imageAlts.<key>); decorative when empty.
+const altOf = (c, key) => c.imageAlts?.[key] || ''
 
-function Hero({ c }) {
+// Linked section, so story cards can show its read time and fall back to its description.
+const sectionFor = (sections, slug) => sections.find((x) => x.slug === slug)
+const withMin = (tag, sec) => (sec?.read_min && !/min/i.test(tag || '') ? `${tag} · ${sec.read_min} min` : tag)
+
+function Hero({ c, base }) {
   const h = c.hero
+  const feature = c.stories?.feature?.slug
   return (
-    <section id="top" {...cms('c.images.hero')} className="relative flex min-h-[760px] items-end overflow-hidden bg-ink text-white">
-      <Photo src={c.images.hero} tone="hero" alt="" className="hero-img absolute inset-0" />
+    <section id="top" {...cms('c.images.hero')} className="relative flex min-h-[max(760px,100svh)] flex-col overflow-hidden bg-ink text-white">
+      <Photo src={c.images.hero} tone="hero" alt={altOf(c, 'hero')} priority className="hero-img absolute inset-0" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/30" />
-      <div className="relative w-full px-[3.5vw] pb-14">
-        <p {...cms('c.hero.eyebrow')} className="hero-in label !text-[9px]" style={{ '--d': '100ms' }}>{h.eyebrow}</p>
-        <h1 {...cms('c.hero.title')} className="hero-in mt-6 pb-3 text-[clamp(64px,11vw,160px)]" style={{ '--d': '250ms' }}><Lines>{h.title}</Lines></h1>
+      <div className="hero-in relative mt-[clamp(104px,8vw,190px)] flex justify-between gap-6 px-[3.5vw] text-[clamp(11px,.52vw,14px)] font-medium uppercase tracking-[.16em] text-white/85" style={{ '--d': '50ms' }}>
+        <span {...cms('c.hero.topLeft')}>{h.topLeft}</span><span {...cms('c.hero.topRight')}>{h.topRight}</span>
+      </div>
+      <div className="relative mt-auto w-full px-[3.5vw] pb-14">
+        <p {...cms('c.hero.eyebrow')} className="hero-in label" style={{ '--d': '100ms' }}>{h.eyebrow}</p>
+        <h1 {...cms('c.hero.title')} className="hero-in mt-6 pb-3 text-[clamp(64px,8.6vw,230px)] !leading-[.86]" style={{ '--d': '250ms' }}><Lines>{h.title}</Lines></h1>
         <div className="hero-in mt-6 flex flex-wrap items-end justify-between gap-8 border-t border-white/30 pt-7" style={{ '--d': '450ms' }}>
-          <p {...cms('c.hero.sub')} className="font-display text-[19px] font-light leading-snug"><Lines>{h.sub}</Lines></p>
+          <p {...cms('c.hero.sub')} className="font-display text-[clamp(19px,1.05vw,28px)] font-light leading-snug"><Lines>{h.sub}</Lines></p>
           <div className="flex flex-col items-start gap-5">
-            <button {...cms('c.hero.cta')} className="btn" onClick={() => go('stories')}>{h.cta} <Arrow /></button>
-            <button {...cms('c.hero.link')} className="link-line !justify-start" onClick={() => go('stories')}>{h.link}</button>
+            <Link {...cms('c.hero.cta')} className="btn" to={feature ? `${base}/section/${feature}` : `${base}#stories`}>{h.cta} <Arrow /></Link>
+            <Link {...cms('c.hero.link')} className="link-line !justify-start" to={`${base}#stories`}>{h.link}</Link>
           </div>
         </div>
       </div>
@@ -31,63 +42,84 @@ function Hero({ c }) {
 function Intro({ c }) {
   const i = c.intro
   return (
-    <section className="grid gap-10 border-b border-ink/15 px-[3.5vw] py-32 md:grid-cols-[1fr_2.2fr]">
-      <p {...cms('c.intro.label')} className="label !text-[9px]">{i.label}</p>
+    <section className="grid gap-10 border-b border-ink/15 px-[3.5vw] py-32 md:grid-cols-[29.2vw_1fr]">
+      <p {...cms('c.intro.label')} className="label">{i.label}</p>
       <div>
-        <Reveal as="p" {...cms('c.intro.quote')} className="max-w-[860px] font-display text-[clamp(34px,4.2vw,60px)] font-light leading-[1.08] tracking-[-.04em]">{i.quote}</Reveal>
-        <Reveal as="p" delay={150} {...cms('c.intro.note')} className="mt-14 max-w-[520px] text-[13px] leading-[1.8] text-soot/80 md:ml-[10%]">{i.note}</Reveal>
+        <Reveal as="p" {...cms('c.intro.quote')} className="font-display text-[clamp(34px,3.3vw,88px)] font-light leading-[1.08] tracking-[-.04em] md:max-w-[44vw]">{i.quote}</Reveal>
+        <Reveal as="p" delay={150} {...cms('c.intro.note')} className="mt-14 text-[clamp(13px,.7vw,18px)] leading-[1.8] text-soot/80 md:ml-[14vw] md:max-w-[29vw]">{i.note}</Reveal>
       </div>
     </section>
   )
 }
 
-function Stories({ c, base }) {
+// Description shown on a story: its own, or else the linked section's (edited on that section).
+function storyDesc(own, ownPath, sec) {
+  if (own) return [own, cms(ownPath)]
+  if (sec?.descr) return [sec.descr, cms(`s.${sec.id}.descr`)]
+  return ['', cms(ownPath)]
+}
+
+// One highlighted story. The middle card of each row of three is the dark "quote" card.
+function StoryCard({ card, i, sec, to, anchor }) {
+  const p = `c.stories.cards.${i}`
+  const [desc, descCms] = storyDesc(card.desc, `${p}.desc`, sec)
+  if (i % 3 === 1)
+    return (
+      <Reveal as="article" delay={120} id={anchor} className="relative flex scroll-mt-24 flex-col justify-between overflow-hidden bg-ink p-[clamp(24px,1.7vw,44px)] text-white max-md:min-h-[460px]">
+        {card.imageUrl ? <Photo cms={`${p}.imageUrl`} src={card.imageUrl} alt={card.imageAlt || ''} tone="people" className="absolute inset-0 opacity-40" /> : null}
+        <p {...cms(`${p}.tag`)} className="label relative">{withMin(card.tag, sec)}</p>
+        <div className="relative mt-16">
+          <h3 {...cms(`${p}.title`)} className="text-[clamp(30px,2.45vw,64px)] !leading-[1.05]">{card.title}</h3>
+          {desc ? <p {...descCms} className="mt-6 max-w-[85%] text-[clamp(13px,.8vw,20px)] leading-[1.7] text-white/80">{desc}</p> : null}
+          <Link {...cms(`${p}.cta`)} to={to(card.slug)} className="link-line mt-10 w-full">{card.cta} <Arrow /></Link>
+        </div>
+      </Reveal>
+    )
+  return (
+    <Reveal as="article" delay={(i % 3) * 120} className="flex flex-col">
+      <Photo cms={`${p}.imageUrl`} src={card.imageUrl} alt={card.imageAlt || ''} tone={['walkway', 'people', 'blocks'][i % 3]} className="aspect-[1.94] w-full" />
+      <div className="flex flex-1 flex-col pt-6 md:px-[1vw]">
+        <p {...cms(`${p}.tag`)} className="label text-soot">{withMin(card.tag, sec)}</p>
+        <h3 {...cms(`${p}.title`)} className="mt-6 text-[clamp(24px,1.6vw,42px)] !leading-[1.1]">{card.title}</h3>
+        {desc ? <p {...descCms} className="mt-4 text-[clamp(13px,.8vw,20px)] leading-[1.7] text-ink">{desc}</p> : null}
+        <Link {...cms(`${p}.cta`)} to={to(card.slug)} className="link-line mt-auto w-full pt-10">{card.cta} <Arrow /></Link>
+      </div>
+    </Reveal>
+  )
+}
+
+function Stories({ c, sections, base }) {
   const s = c.stories
-  const [a, b, d] = s.cards
+  const f = s.feature
+  const fsec = sectionFor(sections, f.slug)
+  const [fdesc, fdescCms] = storyDesc(f.desc, 'c.stories.feature.desc', fsec)
   const to = (slug) => `${base}/section/${slug}`
+  const cards = s.cards || []
   return (
     <section id="stories" className="px-[3.5vw] py-24">
-      <div className="flex justify-between border-b border-ink pb-3 text-[9px] uppercase tracking-[.14em] text-soot">
+      <div className="meta flex justify-between gap-6 border-b border-ink pb-3 text-soot">
         <span {...cms('c.stories.label')}>{s.label}</span><span {...cms('c.stories.meta')}>{s.meta}</span>
       </div>
 
-      <div className="mt-10 grid items-end gap-12 md:grid-cols-[1.4fr_1fr]">
-        <Photo cms="c.images.transform" src={c.images.transform} tone="transform" className="aspect-[1.55] w-full">
-          <span className="absolute left-3 top-3 bg-white px-2 py-1 text-[8px] tracking-[.14em] text-ink">01 / 04</span>
+      <div className="mt-10 grid items-center gap-12 md:grid-cols-[62fr_38fr]">
+        <Photo cms="c.images.transform" src={c.images.transform} alt={altOf(c, 'transform')} tone="transform" className="aspect-[1.72] w-full">
+          <span className="absolute left-3 top-3 bg-white px-2 py-1 text-[10px] tracking-[.14em] text-ink">01 / {pad2(cards.length + 1)}</span>
         </Photo>
-        <Reveal className="pb-4">
-          <p {...cms('c.stories.feature.tag')} className="label !text-[9px] text-soot">{s.feature.tag}</p>
-          <h2 {...cms('c.stories.feature.title')} className="mt-5 text-[clamp(44px,5.2vw,76px)]">{s.feature.title}</h2>
-          <p {...cms('c.stories.feature.desc')} className="mt-6 max-w-[360px] text-[12px] leading-[1.8] text-soot/80">{s.feature.desc}</p>
-          <Link {...cms('c.stories.feature.cta')} to={to(s.feature.slug)} className="link-line mt-8 w-[165px]">{s.feature.cta} <Arrow /></Link>
+        <Reveal>
+          <p {...cms('c.stories.feature.tag')} className="label text-soot">{withMin(f.tag, fsec)}</p>
+          <h2 {...cms('c.stories.feature.title')} className="mt-5 text-[clamp(40px,3.7vw,100px)]">{f.title}</h2>
+          {fdesc ? <p {...fdescCms} className="mt-6 text-[clamp(13px,.8vw,20px)] leading-[1.8] text-soot/90 md:max-w-[30vw]">{fdesc}</p> : null}
+          <Link {...cms('c.stories.feature.cta')} to={to(f.slug)} className="link-line mt-8 w-[clamp(165px,11vw,300px)]">{f.cta} <Arrow /></Link>
         </Reveal>
       </div>
 
-      <div className="mt-28 grid items-start md:grid-cols-3">
-        <Reveal as="article" className="pr-8">
-          <Photo cms="c.images.walkway" src={c.images.walkway} tone="walkway" className="aspect-[1.05]" />
-          <p {...cms('c.stories.cards.0.tag')} className="label !text-[9px] mt-5 px-5">{a.tag}</p>
-          <h3 {...cms('c.stories.cards.0.title')} className="mt-10 px-5 text-[28px]">{a.title}</h3>
-          <Link {...cms('c.stories.cards.0.cta')} to={to(a.slug)} className="link-line mt-12 ml-5 w-[190px] !border-transparent text-soot/70">{a.cta} <Arrow /></Link>
-        </Reveal>
-
-        <Reveal as="article" delay={120} {...cms('c.images.people')} className="relative -mt-2 aspect-[0.8] bg-ink text-white">
-          <Photo src={c.images.people} tone="people" className="absolute inset-0 opacity-70" />
-          <div className="absolute inset-0 flex flex-col justify-end p-6">
-            <p {...cms('c.stories.cards.1.tag')} className="label !text-[9px] mb-5">{b.tag}</p>
-            <h3 {...cms('c.stories.cards.1.title')} className="text-[34px]">{b.title}</h3>
-            <p {...cms('c.stories.cards.1.desc')} className="mt-6 max-w-[250px] text-[11px] leading-[1.7] text-white/60">{b.desc}</p>
-            <Link {...cms('c.stories.cards.1.cta')} to={to(b.slug)} className="link-line mt-8 w-[170px]">{b.cta} <Arrow /></Link>
-          </div>
-        </Reveal>
-
-        <Reveal as="article" delay={240} className="pl-8">
-          <Photo cms="c.images.blocks" src={c.images.blocks} tone="blocks" className="aspect-[1.05]" />
-          <p {...cms('c.stories.cards.2.tag')} className="label !text-[9px] mt-5">{d.tag}</p>
-          <h3 {...cms('c.stories.cards.2.title')} className="mt-10 text-[26px]">{d.title}</h3>
-          <Link {...cms('c.stories.cards.2.cta')} to={to(d.slug)} className="link-line mt-12 w-[180px] !border-transparent">{d.cta} <Arrow /></Link>
-        </Reveal>
-      </div>
+      {cards.length > 0 && (
+        <div className="mt-28 grid items-stretch gap-x-1 gap-y-16 md:grid-cols-[1.25fr_1fr_1.25fr] md:gap-y-1">
+          {cards.map((card, i) => (
+            <StoryCard key={i} card={card} i={i} sec={sectionFor(sections, card.slug)} to={to} anchor={i === 1 ? 'people' : undefined} />
+          ))}
+        </div>
+      )}
     </section>
   )
 }
@@ -95,17 +127,17 @@ function Stories({ c, base }) {
 function Directory({ c, sections, base }) {
   return (
     <section id="sections" className="bg-ink px-[3.5vw] py-28 text-white">
-      <div className="grid gap-10 md:grid-cols-[1fr_2.2fr]">
-        <p {...cms('c.directory.label')} className="label !text-[9px] text-white/60">{c.directory.label}</p>
-        <h2 {...cms('c.directory.title')} className="text-[clamp(48px,6vw,92px)] text-white/90"><Lines>{c.directory.title}</Lines></h2>
+      <div className="grid gap-10 md:grid-cols-[33vw_1fr]">
+        <p {...cms('c.directory.label')} className="label text-white/75">{c.directory.label}</p>
+        <h2 {...cms('c.directory.title')} className="text-[clamp(44px,3.95vw,104px)] text-white/90"><Lines>{c.directory.title}</Lines></h2>
       </div>
       <div className="mt-20 border-t border-white/25">
         {sections.map(({ id, n, slug, title, descr }, i) => (
           <Reveal key={id} delay={(i % 5) * 60}>
-            <Link to={`${base}/section/${slug}`} className="group grid w-full grid-cols-[48px_1fr_30px] items-center gap-6 border-b border-soot py-[25px] text-left transition-colors hover:bg-white/[.03] md:grid-cols-[70px_1.2fr_1fr_30px]">
-              <span className="text-[9px] text-white/40">{n}</span>
-              <span {...cms(`s.${id}.title`)} className="font-display text-[26px] font-light tracking-[-.03em] transition-transform duration-300 group-hover:translate-x-2">{title}</span>
-              <span {...cms(`s.${id}.descr`)} className="hidden max-w-[360px] text-[11px] leading-[1.7] text-white/50 md:block">{descr}</span>
+            <Link to={`${base}/section/${slug}`} className="group grid w-full grid-cols-[48px_1fr_30px] items-center gap-6 border-b border-soot py-[25px] text-left transition-all duration-300 hover:bg-paper hover:px-4 hover:text-ink md:grid-cols-[5.1vw_46.8vw_1fr_30px]">
+              <span className="text-[11px] text-white/60 transition-colors group-hover:text-ink/60">{n}</span>
+              <span {...cms(`s.${id}.title`)} className="font-display text-[clamp(26px,1.6vw,44px)] font-light tracking-[-.03em]">{title}</span>
+              <span {...cms(`s.${id}.descr`)} className="hidden max-w-[30vw] text-[clamp(13px,.7vw,18px)] leading-[1.7] text-white/70 transition-colors group-hover:text-ink/75 md:block">{descr}</span>
               <span className="justify-self-end transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"><Arrow /></span>
             </Link>
           </Reveal>
@@ -119,20 +151,20 @@ function AiCorner({ c }) {
   const [open, setOpen] = useState(false)
   const a = c.ai
   return (
-    <section id="ideas" className="grid md:grid-cols-[1.12fr_1fr]">
-      <Photo cms="c.images.ai" src={c.images.ai} tone="ai" className="min-h-[520px]" />
-      <div className="flex flex-col justify-center px-[6vw] py-20">
-        <p {...cms('c.ai.label')} className="label !text-[9px]">{a.label}</p>
-        <Reveal as="h2" {...cms('c.ai.title')} className="mt-8 text-[clamp(44px,5vw,72px)] text-soot">{a.title}</Reveal>
-        <p {...cms('c.ai.desc')} className="mt-8 max-w-[390px] text-[12.5px] leading-[1.8] text-soot/70">{a.desc}</p>
-        <div className="mt-12 max-w-[390px] border-y border-ink/30">
-          <button {...cms('c.ai.promptLabel')} onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between py-[18px] text-[10px] uppercase tracking-label transition-all duration-300 hover:pl-2">
+    <section id="ideas" className="grid md:grid-cols-[1.3fr_1fr]">
+      <Photo cms="c.images.ai" src={c.images.ai} alt={altOf(c, 'ai')} tone="ai" className="min-h-[520px]" />
+      <div className="flex flex-col justify-center px-[5vw] py-20">
+        <p {...cms('c.ai.label')} className="label">{a.label}</p>
+        <Reveal as="h2" {...cms('c.ai.title')} className="mt-8 text-[clamp(40px,3.9vw,104px)] text-ink">{a.title}</Reveal>
+        <p {...cms('c.ai.desc')} className="mt-8 text-[clamp(13px,.7vw,18px)] leading-[1.8] text-soot/90 md:max-w-[31vw]">{a.desc}</p>
+        <div className="mt-12 w-full border-y border-ink/30 md:max-w-[31vw]">
+          <button {...cms('c.ai.promptLabel')} onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between py-[18px] text-[11px] uppercase tracking-label transition-all duration-300 hover:pl-2">
             {a.promptLabel}
             <span className={`text-[14px] transition-transform duration-300 ${open ? 'rotate-45' : ''}`}>+</span>
           </button>
           <div className={`collapse ${open ? 'open' : ''}`}>
             <div>
-              <p {...cms('c.ai.prompt')} className={`px-2 pb-6 text-[12px] leading-[1.8] text-soot transition-all duration-500 ${open ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>{a.prompt}</p>
+              <p {...cms('c.ai.prompt')} className={`px-2 pb-6 text-[13px] leading-[1.8] text-soot transition-all duration-500 ${open ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>{a.prompt}</p>
             </div>
           </div>
         </div>
@@ -141,73 +173,134 @@ function AiCorner({ c }) {
   )
 }
 
-function Poll({ c, base }) {
+// Remembers in this browser that a vote was cast, so readers see the thank-you on return.
+const pollKey = (qid) => `poll-vote:${qid}`
+const myVote = (qid) => { try { return localStorage.getItem(pollKey(qid)) || '' } catch { return '' } }
+const votedHere = (qid) => !!myVote(qid)
+
+// Live tallies for this edition, shown once the reader has voted. Counts only; never who voted.
+function PollResults({ quarter, options, mine }) {
+  const [rows, setRows] = useState(null)
+  useEffect(() => {
+    if (isCms) return undefined
+    let live = true
+    supabase.rpc('poll_counts', { p_quarter: quarter.id }).then(({ data, error }) => live && !error && setRows(data || []))
+    return () => { live = false }
+  }, [quarter.id])
+  if (!rows) return null
+  const count = Object.fromEntries(rows.map((r) => [r.choice, Number(r.votes)]))
+  const total = options.reduce((n, o) => n + (count[o] || 0), 0)
+  if (!total) return null
+  return (
+    <ul className="mt-8 space-y-4" aria-label="Results so far">
+      {options.map((o) => {
+        const pct = Math.round(((count[o] || 0) / total) * 100)
+        return (
+          <li key={o}>
+            <div className="flex justify-between text-[13px] text-soot">
+              <span>{o}{o === mine && <span className="ml-2 text-[11px] uppercase tracking-[.12em] text-soot/80">· Your vote</span>}</span>
+              <span className="tabular-nums">{pct}%</span>
+            </div>
+            <div className="mt-2 h-[3px] bg-soot/15"><div className="h-full bg-ink transition-[width] duration-700" style={{ width: `${pct}%` }} /></div>
+          </li>
+        )
+      })}
+      <li className="text-[11px] uppercase tracking-[.12em] text-soot/80">{total} {total === 1 ? 'vote' : 'votes'} so far</li>
+    </ul>
+  )
+}
+
+function Poll({ c, base, quarter }) {
   const p = c.poll
   const ch = c.challenge
   const [choice, setChoice] = useState('')
-  const [sent, setSent] = useState(false)
+  const [sent, setSent] = useState(() => votedHere(quarter.id))
+  const [mine, setMine] = useState(() => myVote(quarter.id))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const submit = async (e) => {
+    e.preventDefault()
+    if (!choice || busy) return
+    setBusy(true); setError('')
+    const { error: err } = await supabase.from('poll_votes').insert({ quarter_id: quarter.id, choice })
+    setBusy(false)
+    if (err) return setError('Your vote could not be sent. Please try again.')
+    try { localStorage.setItem(pollKey(quarter.id), choice) } catch { /* private mode: still counted */ }
+    setMine(choice)
+    setSent(true)
+  }
   return (
-    <section className="grid bg-stone md:grid-cols-[1.4fr_1fr]">
+    <section className="grid bg-stone md:grid-cols-[1.75fr_1fr]">
       <div className="px-[6vw] py-24">
-        <p {...cms('c.poll.label')} className="label !text-[9px]">{p.label}</p>
-        <h2 {...cms('c.poll.question')} className="mt-8 text-[clamp(44px,5vw,72px)] text-soot">{p.question}</h2>
+        <p {...cms('c.poll.label')} className="label">{p.label}</p>
+        <h2 {...cms('c.poll.question')} className="mt-8 text-[clamp(40px,3.9vw,104px)] text-ink">{p.question}</h2>
         {sent ? (
           <div className="mt-14 max-w-[615px] border-y border-soot/40 py-10">
             <span {...cms('c.poll.thanks')} className="font-display text-[30px] font-light">{p.thanks}</span>
-            <p {...cms('c.poll.thanksNote')} className="mt-2 text-[12px] text-soot/70">{p.thanksNote}</p>
+            <p {...cms('c.poll.thanksNote')} className="mt-2 text-[13px] text-soot/90">{p.thanksNote}</p>
+            <PollResults quarter={quarter} options={p.options} mine={mine} />
           </div>
         ) : (
-          <form className="mt-14 max-w-[615px]" onSubmit={(e) => { e.preventDefault(); choice && setSent(true) }}>
-            {p.options.map((o, i) => (
-              <label key={i} className="flex cursor-pointer items-center justify-between border-t border-soot/30 px-1 py-[19px] font-display text-[15px] text-soot last:border-b">
-                <input type="radio" name="poll" className="sr-only" onChange={() => setChoice(o)} />
-                <span {...cms(`c.poll.options.${i}`)}>{o}</span>
-                <i className={`h-[14px] w-[14px] rounded-full border border-soot/60 transition ${choice === o ? 'bg-ink shadow-[inset_0_0_0_3px_rgb(var(--c-stone))]' : ''}`} />
-              </label>
-            ))}
-            <button {...cms('c.poll.submit')} disabled={!choice} className="btn btn-dark mt-12 !min-w-[198px] disabled:cursor-not-allowed disabled:opacity-40">
-              {p.submit} <Arrow />
+          <form className="mt-14 max-w-[615px]" onSubmit={submit}>
+            <fieldset disabled={busy}>
+              <legend className="sr-only">{p.question}</legend>
+              {p.options.map((o, i) => (
+                <label key={i} className="flex cursor-pointer items-center justify-between border-t border-soot/30 px-1 py-[19px] font-display text-[15px] text-soot last:border-b">
+                  <input type="radio" name="poll" className="peer sr-only" checked={choice === o} onChange={() => setChoice(o)} />
+                  <span {...cms(`c.poll.options.${i}`)}>{o}</span>
+                  <i className={`h-[14px] w-[14px] rounded-full border border-soot/60 transition peer-focus-visible:ring-2 peer-focus-visible:ring-ink ${choice === o ? 'bg-ink shadow-[inset_0_0_0_3px_rgb(var(--c-stone))]' : ''}`} />
+                </label>
+              ))}
+            </fieldset>
+            {error && <p role="alert" className="mt-6 text-[12px] text-red-700">{error}</p>}
+            <button {...cms('c.poll.submit')} disabled={!choice || busy} className="btn btn-dark mt-12 !min-w-[198px] disabled:cursor-not-allowed disabled:opacity-40">
+              {busy ? 'Sending…' : p.submit} <Arrow />
             </button>
           </form>
         )}
       </div>
-      <Photo cms="c.images.challenge" src={c.images.challenge} tone="challenge" className="min-h-[460px] text-white">
+      <Photo cms="c.images.challenge" src={c.images.challenge} alt={altOf(c, 'challenge')} tone="challenge" className="min-h-[460px] text-white">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-        <div className="relative flex h-full flex-col justify-center px-10 py-16">
-          <p {...cms('c.challenge.label')} className="label !text-[9px] mb-4">{ch.label}</p>
-          <span {...cms('c.challenge.number')} className="font-display text-[120px] font-extralight leading-none tracking-[-.04em]">{ch.number}</span>
+        <div className="relative flex h-full flex-col justify-between px-[clamp(28px,2.4vw,64px)] py-[clamp(40px,3vw,80px)]">
+          <p {...cms('c.challenge.label')} className="label">{ch.label}</p>
+          <div className="mt-24">
+          <span {...cms('c.challenge.number')} className="font-display text-[clamp(110px,8.3vw,220px)] font-extralight leading-none tracking-[-.04em]">{ch.number}</span>
           <h3 {...cms('c.challenge.title')} className="mt-1 max-w-[360px] text-[34px] text-white">{ch.title}</h3>
-          <p {...cms('c.challenge.desc')} className="mt-6 max-w-[320px] text-[11px] leading-[1.7] text-white/60">{ch.desc}</p>
+          <p {...cms('c.challenge.desc')} className="mt-6 max-w-[320px] text-[13px] leading-[1.7] text-white/85">{ch.desc}</p>
           <Link {...cms('c.challenge.cta')} to={`${base}/section/${ch.slug}`} className="link-line mt-5 w-[200px]">{ch.cta} <Arrow /></Link>
+          </div>
         </div>
       </Photo>
     </section>
   )
 }
 
-function Archive({ c, current }) {
-  const { quarters } = useSite()
-  const list = quarters.filter((q) => q.is_published)
+// Other live editions, newest first. Readers land on the current one, so it isn't repeated here.
+const otherEditions = (quarters, current) => quarters.filter((q) => q.slug !== current && isLive(q))
+
+function Archive({ c, list }) {
   const a = c.archive
-  const tones = ['bg-ink text-white', 'bg-stone text-ink', 'text-ink']
+  if (!list.length)
+    return isCms ? <p className="px-[3.5vw] py-16 text-[13px] text-soot/80">The archive (past editions) appears here once another edition is live.</p> : null
+  const tones = ['bg-stone text-ink', 'bg-white text-ink', 'bg-ink text-white']
   return (
     <section id="archive" className="px-[3.5vw] py-32">
-      <div className="grid items-start gap-10 md:grid-cols-[1fr_2.2fr_1fr]">
-        <p {...cms('c.archive.label')} className="label !text-[9px] pt-2">{a.label}</p>
-        <h2 {...cms('c.archive.title')} className="text-[clamp(48px,5.4vw,80px)]">{a.title}</h2>
-        <p {...cms('c.archive.desc')} className="max-w-[260px] text-[11.5px] leading-[1.7] text-soot/70">{a.desc}</p>
+      <div className="grid items-end gap-10 md:grid-cols-[28.3vw_1fr_23.2vw]">
+        <p {...cms('c.archive.label')} className="label pb-3">{a.label}</p>
+        <h2 {...cms('c.archive.title')} className="text-[clamp(44px,3.95vw,104px)]">{a.title}</h2>
+        <p {...cms('c.archive.desc')} className="pb-3 text-[clamp(13px,.7vw,18px)] leading-[1.7] text-soot/90">{a.desc}</p>
       </div>
-      <div className="mt-20 grid gap-6 md:grid-cols-3">
+      <div className={`mt-20 grid gap-1 ${list.length === 1 ? 'max-w-[420px]' : list.length === 2 ? 'sm:grid-cols-2 lg:max-w-[66%]' : 'sm:grid-cols-2 md:grid-cols-3'}`}>
         {list.map((q, i) => (
           <Reveal key={q.id} delay={i * 100}>
             <Link
               to={`/q/${q.slug}`}
               aria-label={`Open ${q.label} edition: ${q.title}`}
-              className={`group flex aspect-[0.76] w-full flex-col justify-between p-6 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_50px_rgba(0,0,0,.14)] ${tones[i % 3]} ${q.slug === current ? 'ring-1 ring-ink ring-offset-4 ring-offset-paper' : ''}`}
+              className={`group flex aspect-[0.76] w-full flex-col justify-between p-[clamp(24px,1.7vw,44px)] text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_24px_50px_rgba(0,0,0,.14)] ${tones[i % 3]}`}
             >
-              <span className="text-[8px] uppercase tracking-[.14em] opacity-70">{q.slug === current ? 'Current edition' : 'Edition'}</span>
-              <span className="font-display text-[clamp(110px,13vw,190px)] font-extralight leading-none tracking-[-.05em] transition-transform duration-500 group-hover:translate-x-2">{String(q.issue_no || q.label.slice(1, 2)).padStart(2, '0')}</span>
-              <span className="text-[12px] leading-[1.6]">{q.label}<br />{q.title}</span>
+              <span {...cms('c.archive.cardLabel')} className="text-[clamp(11px,.52vw,14px)] uppercase tracking-[.14em] opacity-80">{a.cardLabel}</span>
+              <span className="font-display text-[clamp(110px,11.8vw,320px)] font-extralight leading-none tracking-[-.05em] transition-transform duration-500 group-hover:translate-x-2">{pad2(q.issue_no || q.label.slice(1, 2))}</span>
+              <span className="text-[clamp(13px,.7vw,18px)] leading-[1.6]">{q.label}<br />{q.title}</span>
             </Link>
           </Reveal>
         ))}
@@ -218,17 +311,27 @@ function Archive({ c, current }) {
 
 export default function Journal({ quarter, sections, base }) {
   const c = quarter.content
+  const { brand, quarters } = useSite()
+  const past = otherEditions(quarters, quarter.slug)
+  useMeta({
+    title: `${quarter.title} — ${quarter.label} · ${brand.wordmark}`,
+    description: c.hero?.sub?.replace(/\s+/g, ' ') || c.intro?.note,
+    image: c.images?.hero,
+    imageAlt: c.imageAlts?.hero || `${quarter.title}: cover image`,
+  })
   return (
-    <main>
-      <Header base={base} issue={`Issue ${String(quarter.issue_no).padStart(2, '0')} — ${quarter.label}`} />
-      <Hero c={c} />
+    <>
+      <Header base={base} issue={`Issue ${pad2(quarter.issue_no)} — ${quarter.label}`} showArchive={past.length > 0} />
+      <main id="main" tabIndex={-1} className="bg-home outline-none">
+      <Hero c={c} base={base} />
       <Intro c={c} />
-      <Stories c={c} base={base} />
+      <Stories c={c} sections={sections} base={base} />
       <Directory c={c} sections={sections} base={base} />
       <AiCorner c={c} />
-      <Poll c={c} base={base} />
-      <Archive c={c} current={quarter.slug} />
+      <Poll c={c} base={base} quarter={quarter} />
+      <Archive c={c} list={past} />
+      </main>
       <Footer />
-    </main>
+    </>
   )
 }

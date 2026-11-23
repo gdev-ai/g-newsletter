@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Route, Routes, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { supabase, errorText } from '../lib/supabase.js'
 import { btnCls, inputCls, Label } from './fields.jsx'
 import Quarters from './Quarters.jsx'
 import Editor from './Editor.jsx'
@@ -13,7 +13,7 @@ function Login({ error }) {
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setMsg('')
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-    if (err) setMsg(err.message)
+    if (err) setMsg(errorText(err))
     setBusy(false)
   }
   return (
@@ -33,22 +33,35 @@ function Login({ error }) {
 }
 
 export default function Admin() {
-  const [state, setState] = useState({ loading: true, session: null, isAdmin: false })
+  const [state, setState] = useState({ loading: true, session: null, isAdmin: false, error: '' })
+  const [attempt, setAttempt] = useState(0)
   const nav = useNavigate()
 
   useEffect(() => {
+    let live = true
     const check = async (session) => {
-      if (!session) return setState({ loading: false, session: null, isAdmin: false })
-      const { data } = await supabase.from('admins').select('email').limit(1)
-      setState({ loading: false, session, isAdmin: !!data?.length })
+      if (!session) return live && setState({ loading: false, session: null, isAdmin: false, error: '' })
+      const { data, error } = await supabase.from('admins').select('email').limit(1)
+      if (live) setState({ loading: false, session, isAdmin: !!data?.length, error: error ? errorText(error) : '' })
     }
-    supabase.auth.getSession().then(({ data }) => check(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => check(s))
-    return () => sub.subscription.unsubscribe()
-  }, [])
+    // Fires once with the current session (INITIAL_SESSION), then on every sign-in/out.
+    // Supabase calls are deferred out of the callback, as the auth client requires.
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { setTimeout(() => check(s), 0) })
+    return () => { live = false; sub.subscription.unsubscribe() }
+  }, [attempt])
 
   if (state.loading) return <div className="grid min-h-screen place-items-center bg-neutral-100 text-[12px] text-neutral-500">Loading…</div>
   if (!state.session) return <Login />
+  if (state.error)
+    return (
+      <div className="grid min-h-screen place-items-center bg-neutral-100 p-6 text-center font-sans">
+        <div className="space-y-4">
+          <p className="text-[14px] text-neutral-800">Could not check your access.</p>
+          <p className="text-[12px] text-neutral-500">{state.error}</p>
+          <button className={btnCls} onClick={() => { setState((s) => ({ ...s, loading: true })); setAttempt((n) => n + 1) }}>Try again</button>
+        </div>
+      </div>
+    )
   if (!state.isAdmin)
     return (
       <div className="grid min-h-screen place-items-center bg-neutral-100 p-6 text-center font-sans">
