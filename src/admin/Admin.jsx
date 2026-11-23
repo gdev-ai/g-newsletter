@@ -1,0 +1,81 @@
+import { useEffect, useState } from 'react'
+import { Link, Route, Routes, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { btnCls, inputCls, Label } from './fields.jsx'
+import Quarters from './Quarters.jsx'
+import Editor from './Editor.jsx'
+
+function Login({ error }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [msg, setMsg] = useState(error || '')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setMsg('')
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    if (err) setMsg(err.message)
+    setBusy(false)
+  }
+  return (
+    <div className="grid min-h-screen place-items-center bg-neutral-100 p-6 font-sans">
+      <form onSubmit={submit} className="w-full max-w-sm space-y-5 rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
+        <div>
+          <h1 className="font-sans text-[22px] font-semibold tracking-tight text-neutral-900">Journal CMS</h1>
+          <p className="mt-1 text-[12px] text-neutral-500">Sign in to edit the newsletter.</p>
+        </div>
+        <label className="block"><Label>Email</Label><input type="email" required className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        <label className="block"><Label>Password</Label><input type="password" required className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        {msg && <p className="text-[12px] text-red-600">{msg}</p>}
+        <button className={`${btnCls} w-full`} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      </form>
+    </div>
+  )
+}
+
+export default function Admin() {
+  const [state, setState] = useState({ loading: true, session: null, isAdmin: false })
+  const nav = useNavigate()
+
+  useEffect(() => {
+    const check = async (session) => {
+      if (!session) return setState({ loading: false, session: null, isAdmin: false })
+      const { data } = await supabase.from('admins').select('email').limit(1)
+      setState({ loading: false, session, isAdmin: !!data?.length })
+    }
+    supabase.auth.getSession().then(({ data }) => check(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => check(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  if (state.loading) return <div className="grid min-h-screen place-items-center bg-neutral-100 text-[12px] text-neutral-500">Loading…</div>
+  if (!state.session) return <Login />
+  if (!state.isAdmin)
+    return (
+      <div className="grid min-h-screen place-items-center bg-neutral-100 p-6 text-center font-sans">
+        <div className="space-y-4">
+          <p className="text-[14px] text-neutral-800">{state.session.user.email} is not an admin.</p>
+          <button className={btnCls} onClick={() => supabase.auth.signOut()}>Sign out</button>
+        </div>
+      </div>
+    )
+
+  const out = async () => { await supabase.auth.signOut(); nav('/admin') }
+  const email = state.session.user.email
+  return (
+    <Routes>
+      <Route index element={<Editor email={email} onSignOut={out} />} />
+      <Route
+        path="quarters"
+        element={
+          <div className="min-h-screen bg-neutral-100 font-sans text-neutral-900">
+            <div className="flex h-12 items-center justify-between border-b border-neutral-200 bg-white px-6 text-[13px]">
+              <Link to="/admin" className="font-medium">← Back to editor</Link>
+              <button onClick={out} className="text-neutral-600 hover:text-neutral-900">Sign out</button>
+            </div>
+            <div className="p-8"><Quarters /></div>
+          </div>
+        }
+      />
+    </Routes>
+  )
+}
