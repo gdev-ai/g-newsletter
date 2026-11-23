@@ -43,9 +43,10 @@
 @keyframes zoom { from { transform: scale(1.08); } to { transform: scale(1); } }
 
 /* collapsible prompt */
-.collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s ease; }
-.collapse.open { grid-template-rows: 1fr; }
-.collapse > div { overflow: hidden; }
+/* not named .collapse: that clashes with Tailwind's visibility:collapse utility */
+.accordion { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s ease; }
+.accordion.open { grid-template-rows: 1fr; }
+.accordion > div { overflow: hidden; }
 
 :root {
   --c-paper: 241 240 236; --c-home: 255 255 255; --c-stone: 217 216 210; --c-ink: 17 17 17; --c-soot: 59 59 59;

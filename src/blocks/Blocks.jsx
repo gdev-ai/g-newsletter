@@ -208,7 +208,7 @@ export function Block({ b }) {
 export function BlockGrid({ blocks }) {
   if (!blocks?.length) return null
   return (
-    <div className="grid grid-cols-1 gap-4 md:auto-rows-[minmax(96px,auto)] md:grid-cols-12 md:gap-6">
+    <div className="grid grid-cols-1 gap-y-12 md:auto-rows-[minmax(96px,auto)] md:grid-cols-12 md:gap-x-6 md:gap-y-[clamp(56px,4.5vw,112px)]">
       {blocks.map((b, i) => (
         <div
           key={b.id || i}

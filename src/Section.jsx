@@ -150,7 +150,7 @@ export default function Section({ quarter, sections, base }) {
           </figure>
         )}
 
-        <section className="grid gap-y-10 px-[6vw] py-[clamp(72px,7vw,190px)] md:grid-cols-[minmax(0,26vw)_minmax(0,1fr)] md:gap-x-[10.4vw] md:pl-[12.1vw] md:pr-[19vw]">
+        <section className="grid gap-y-10 px-[6vw] py-[clamp(72px,7vw,190px)] md:grid-cols-[minmax(0,26vw)_minmax(0,1fr)] md:gap-x-[10.4vw] md:pl-[12.1vw] md:pr-[12.1vw]">
           <div>
             {lead && (
               <Reveal as="p" {...cms(`s.${s.id}.body.${lead[1]}`)} className="font-display text-[clamp(30px,2.85vw,78px)] font-light leading-[1.1] tracking-[-.045em] text-ink">{lead[0]}</Reveal>

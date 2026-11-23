@@ -42,7 +42,7 @@ function Hero({ c, base }) {
 function Intro({ c }) {
   const i = c.intro
   return (
-    <section className="grid gap-10 border-b border-ink/15 px-[3.5vw] py-32 md:grid-cols-[29.2vw_1fr]">
+    <section className="grid gap-10 border-b border-ink/15 px-[3.5vw] py-24 md:grid-cols-[29.2vw_1fr]">
       <p {...cms('c.intro.label')} className="label">{i.label}</p>
       <div>
         <Reveal as="p" {...cms('c.intro.quote')} className="font-display text-[clamp(34px,3.3vw,88px)] font-light leading-[1.08] tracking-[-.04em] md:max-w-[44vw]">{i.quote}</Reveal>
@@ -69,14 +69,14 @@ function Glance({ c, base }) {
           const inner = (
             <>
               <span {...cms(`c.glance.items.${i}.value`)} className="block font-display text-[clamp(40px,3.4vw,84px)] font-extralight leading-none tracking-[-.05em] tabular-nums">{it.value}</span>
-              <span {...cms(`c.glance.items.${i}.label`)} className="mt-5 block text-[11px] font-medium uppercase tracking-label">{it.label}</span>
+              <span {...cms(`c.glance.items.${i}.label`)} className="mt-4 block text-[11px] font-medium uppercase tracking-label">{it.label}</span>
               <span {...cms(`c.glance.items.${i}.note`)} className="mt-2 block text-[13px] leading-[1.6] text-soot/85">{it.note}</span>
             </>
           )
           // Divider lines only between cells; the first cell of each row lines up with the label above.
           const [md, xl] = GLANCE_SPLIT[g.items.length] || GLANCE_SPLIT[6]
           const cls = [
-            'group block h-full border-b border-ink/15 py-8 pr-6 transition-colors',
+            'group block h-full border-b border-ink/15 py-6 pr-6 transition-colors',
             i % 2 ? 'border-l pl-6' : 'pl-0',
             i % md ? 'md:border-l md:pl-6' : 'md:border-l-0 md:pl-0',
             i % xl ? 'xl:border-l xl:pl-6' : 'xl:border-l-0 xl:pl-0',
@@ -217,7 +217,7 @@ function AiCorner({ c, base }) {
             {a.promptLabel}
             <span className={`text-[14px] transition-transform duration-300 ${open ? 'rotate-45' : ''}`}>+</span>
           </button>
-          <div className={`collapse ${open ? 'open' : ''}`}>
+          <div className={`accordion ${open ? 'open' : ''}`}>
             <div>
               <div className={`px-2 pb-6 transition-all duration-500 ${open ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>
                 <p {...cms('c.ai.prompt')} className="whitespace-pre-line text-[13px] leading-[1.8] text-soot">{a.prompt}</p>
@@ -298,7 +298,7 @@ function Poll({ c, base, quarter }) {
   }
   return (
     <section id="poll" className="grid scroll-mt-20 bg-stone md:grid-cols-[1.75fr_1fr]">
-      <div className="px-[6vw] py-24">
+      <div className="px-[6vw] py-20">
         <p {...cms('c.poll.label')} className="label">{p.label}</p>
         <h2 {...cms('c.poll.question')} className="mt-8 text-[clamp(40px,3.9vw,104px)] text-ink">{p.question}</h2>
         {sent ? (
@@ -308,7 +308,7 @@ function Poll({ c, base, quarter }) {
             <PollResults options={p.options} mine={mine} count={count} />
           </div>
         ) : (
-          <form className="mt-14 max-w-[615px]" onSubmit={submit}>
+          <form className="mt-10 max-w-[615px]" onSubmit={submit}>
             <fieldset disabled={busy}>
               <legend className="sr-only">{p.question}</legend>
               {p.options.map((o, i) => (
@@ -330,7 +330,7 @@ function Poll({ c, base, quarter }) {
               )}
             </fieldset>
             {error && <p role="alert" className="mt-6 text-[12px] text-red-700">{error}</p>}
-            <button {...cms('c.poll.submit')} disabled={!choice || busy} className="btn btn-dark mt-12 !min-w-[198px] disabled:cursor-not-allowed disabled:opacity-40">
+            <button {...cms('c.poll.submit')} disabled={!choice || busy} className="btn btn-dark mt-10 !min-w-[198px] disabled:cursor-not-allowed disabled:opacity-40">
               {busy ? 'Sending…' : p.submit} <Arrow />
             </button>
           </form>
