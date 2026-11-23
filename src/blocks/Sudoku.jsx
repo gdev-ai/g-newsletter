@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isCms } from '../lib/cms.js'
+import { ArrowRight, Pause } from 'lucide-react'
 import {
   challengeInfo, challengeLeaderboard, challengePause, challengePauseOnExit, challengePing, challengeResume, challengeStart, challengeSubmit, formatMs, notInstalled, store,
 } from '../lib/engagement.js'
@@ -276,7 +277,7 @@ export default function Sudoku({ edition, title, intro, prize }) {
                 <p className="max-w-[240px] text-right text-[12px] leading-[1.6] text-white/60">Fill every row, column and 3×3 box with 1–9. Your time stops when the grid is complete.</p>
                 {!hidden && (
                   <button type="button" onClick={() => pause('manual')} disabled={busy} className="border border-white/40 px-4 py-2 text-[11px] uppercase tracking-label text-white transition hover:bg-white hover:text-ink disabled:opacity-40">
-                    Pause <span aria-hidden="true">❙❙</span>
+                    Pause <Pause aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} />
                   </button>
                 )}
               </div>
@@ -290,7 +291,7 @@ export default function Sudoku({ edition, title, intro, prize }) {
                     ? <>The grid is hidden and your clock is stopped. Pause time left:<span className="tabular-nums text-white">{formatMs(pauseLeft).replace(/\.\d$/, '')}</span></>
                     : 'You have used all your pause time, so the clock is running again.'}
                 </p>
-                <button type="button" onClick={resume} disabled={busy} className="btn mt-8 !min-w-[200px] disabled:opacity-40">Resume <span aria-hidden="true">→</span></button>
+                <button type="button" onClick={resume} disabled={busy} className="btn mt-8 !min-w-[200px] disabled:opacity-40">Resume <ArrowRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
               </div>
             ) : (
               <Board puzzle={game.puzzle} grid={grid} setGrid={onGrid}sel={sel} setSel={setSel} locked={busy} />
@@ -330,7 +331,7 @@ export default function Sudoku({ edition, title, intro, prize }) {
                 </label>
                 <p className="text-[12px] leading-[1.6] text-white/50">The clock starts when the grid appears. You can pause for up to {formatMs(info?.pause_limit_ms ?? 300000).replace(/\.\d$/, '')} in total; the game pauses itself if you leave the page or go 2 minutes without a move. One official attempt per person; your email is only used to contact the winner.</p>
                 {msg && <p role="alert" className="text-[13px] text-red-300">{msg}</p>}
-                <button disabled={busy || !info} className="btn !min-w-[220px] disabled:opacity-40">{busy ? 'Starting…' : 'Start the clock'} <span aria-hidden="true">→</span></button>
+                <button disabled={busy || !info} className="btn !min-w-[220px] disabled:opacity-40">{busy ? 'Starting…' : 'Start the clock'} <ArrowRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
               </form>
             )}
           </div>

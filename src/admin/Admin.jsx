@@ -4,6 +4,7 @@ import { supabase, errorText } from '../lib/supabase.js'
 import { btnCls, inputCls, Label } from './fields.jsx'
 import Quarters from './Quarters.jsx'
 import Editor from './Editor.jsx'
+import { ArrowLeft } from 'lucide-react'
 
 function Login({ error }) {
   const [email, setEmail] = useState('')
@@ -82,7 +83,7 @@ export default function Admin() {
         element={
           <div className="min-h-screen bg-neutral-100 font-sans text-neutral-900">
             <div className="flex h-12 items-center justify-between border-b border-neutral-200 bg-white px-6 text-[13px]">
-              <Link to="/admin" className="font-medium">← Back to editor</Link>
+              <Link to="/admin" className="font-medium"><ArrowLeft aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /> Back to editor</Link>
               <button onClick={out} className="text-neutral-600 hover:text-neutral-900">Sign out</button>
             </div>
             <div className="p-8"><Quarters /></div>

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Lines, Photo } from '../shared.jsx'
+import { ArrowRight, ArrowUpRight, Check } from 'lucide-react'
 
 const Sudoku = lazy(() => import('./Sudoku.jsx'))
 
@@ -106,7 +107,7 @@ function LinkCard({ c }) {
         <h3 className="mt-4 text-[clamp(22px,1.7vw,34px)]">{c.title}</h3>
         {has(c.desc) && <p className="mt-3 text-[14px] leading-[1.7] text-soot/90 transition group-hover:text-white/75">{c.desc}</p>}
       </div>
-      <span className="link-line mt-8 w-full">{c.cta || 'Open'} <span aria-hidden="true">{ext ? '↗' : '→'}</span></span>
+      <span className="link-line mt-8 w-full">{c.cta || 'Open'} {ext ? <ArrowUpRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /> : <ArrowRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} />}</span>
     </a>
   )
 }
@@ -152,7 +153,7 @@ function Quiz({ c }) {
           return (
             <button key={i} type="button" disabled={answered} onClick={() => setPick(i)} className={`flex items-center justify-between border px-4 py-3 text-left text-[14px] transition ${state}`}>
               <span>{o}</span>
-              {answered && right && <span aria-label="correct answer">✓</span>}
+              {answered && right && <Check aria-label="correct answer" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} />}
             </button>
           )
         })}

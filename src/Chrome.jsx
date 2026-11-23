@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Wordmark } from './shared.jsx'
 import { useSite } from './lib/site.jsx'
+import { ArrowLeft, ArrowUp } from 'lucide-react'
 
 const NAV = [['Explore', 'sections'], ['People', 'people'], ['Ideas', 'ideas'], ['Archive', 'archive']]
 // Archive only appears when there are earlier editions to show.
@@ -68,7 +69,7 @@ export function Header({ base, issue, showArchive = true }) {
           <NavLinks nav={nav} base={base} className="text-[clamp(11px,.52vw,14px)] font-medium uppercase tracking-[.16em] transition hover:opacity-60" />
         </nav>
         <button
-          className="-mr-3 justify-self-end px-3 py-3 text-[12px] uppercase tracking-label md:hidden"
+          className="col-start-3 -mr-3 justify-self-end px-3 py-3 text-[12px] uppercase tracking-label md:hidden"
           aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen(!open)}
         >
           {open ? 'Close' : 'Menu'}
@@ -107,7 +108,7 @@ export function ArticleHeader({ base, issueNo }) {
           <span data-cms="brand.headerTag1">{brand.headerTag1}</span> · Issue {issueNo}
         </p>
         <Link to={base} className="justify-self-end border-b border-white pb-1 text-[clamp(11px,.52vw,14px)] font-medium uppercase tracking-[.16em] transition hover:opacity-70">
-          Back to journal <span aria-hidden="true">←</span>
+          Back to journal <ArrowLeft aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} />
         </Link>
       </header>
     </>
@@ -124,7 +125,7 @@ export function Footer() {
           <span data-cms="brand.footerNote1">{brand.footerNote1}</span><br /><span data-cms="brand.footerNote2">{brand.footerNote2}</span>
         </div>
         <div className="flex flex-wrap gap-8 text-[11px] uppercase tracking-[.12em] md:justify-end">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="border-b border-white pb-1 uppercase">Back to top ↑</button>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="border-b border-white pb-1 uppercase">Back to top <ArrowUp aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
         </div>
       </div>
       <div className="mt-24 border-t border-white/15 pt-6 text-[11px] uppercase tracking-[.12em] text-white/60" data-cms="brand.copyright">{brand.copyright}</div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Field, ghostCls, ImageField, inputCls, Label } from './fields.jsx'
 import { BLOCK_TYPES } from '../blocks/Blocks.jsx'
+import { ArrowLeft, ArrowRight, TriangleAlert } from 'lucide-react'
 
 const TYPES = Object.entries(BLOCK_TYPES).map(([t, d]) => [t, d.label])
 
@@ -127,7 +128,7 @@ export default function GridEditor({ blocks, setBlocks, selId, setSelId }) {
       {blocks.length > 1 && <p className="text-[11px] text-neutral-500">Drag blocks to reorder them. On phones they stack in this order.</p>}
       {warnings.length > 0 && (
         <ul className="space-y-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-          {warnings.map((w) => <li key={w}>⚠ {w}</li>)}
+          {warnings.map((w) => <li key={w}><TriangleAlert aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /> {w}</li>)}
         </ul>
       )}
 
@@ -136,8 +137,8 @@ export default function GridEditor({ blocks, setBlocks, selId, setSelId }) {
           <div className="flex items-center justify-between">
             <h3 className="text-[12px] font-semibold capitalize">{b.type} block</h3>
             <div className="flex gap-1.5">
-              <button className={ghostCls} onClick={() => move(-1)} disabled={idx === 0}>←</button>
-              <button className={ghostCls} onClick={() => move(1)} disabled={idx === blocks.length - 1}>→</button>
+              <button className={ghostCls} onClick={() => move(-1)} disabled={idx === 0} aria-label="Move left"><ArrowLeft aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
+              <button className={ghostCls} onClick={() => move(1)} disabled={idx === blocks.length - 1} aria-label="Move right"><ArrowRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
               <button className="px-1 text-[11px] text-red-600" onClick={() => { setBlocks(blocks.filter((x) => x.id !== selId)); setSelId(null) }}>Delete</button>
             </div>
           </div>

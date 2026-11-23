@@ -7,6 +7,7 @@ import { useSite } from './lib/site.jsx'
 import { cms, isCms } from './lib/cms.js'
 import { pad2 } from './lib/edition.js'
 import { BlockGrid } from './blocks/Blocks.jsx'
+import { ArrowLeft, ArrowRight, ArrowUpRight } from 'lucide-react'
 
 export { BlockGrid }
 
@@ -48,9 +49,9 @@ function Perspective({ to, dir, section }) {
     >
       <span className={`${micro} text-white/55`}>{prev ? 'Previous perspective' : 'Next perspective'}</span>
       <span className="font-display text-[clamp(24px,1.45vw,40px)] font-light tracking-[-.03em]">
-        {prev && <span aria-hidden="true" className="mr-3 inline-block transition-transform duration-300 group-hover:-translate-x-1.5">←</span>}
+        {prev && <span aria-hidden="true" className="mr-3 inline-block transition-transform duration-300 group-hover:-translate-x-1.5"><ArrowLeft aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></span>}
         {section.title || section.short}
-        {!prev && <span aria-hidden="true" className="ml-3 inline-block transition-transform duration-300 group-hover:translate-x-1.5">→</span>}
+        {!prev && <span aria-hidden="true" className="ml-3 inline-block transition-transform duration-300 group-hover:translate-x-1.5"><ArrowRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></span>}
       </span>
     </Link>
   )
@@ -133,7 +134,7 @@ export default function Section({ quarter, sections, base }) {
                 return (
                   <a key={k} href={l.url} {...(ext ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                     className={`inline-flex items-center gap-4 border border-ink px-5 py-3 text-[11px] uppercase tracking-[.13em] transition ${k === 0 ? 'bg-ink text-white hover:bg-transparent hover:text-ink' : 'hover:bg-ink hover:text-white'}`}>
-                    {l.label} <span aria-hidden="true">{ext ? '↗' : '→'}</span>
+                    {l.label} {ext ? <ArrowUpRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /> : <ArrowRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} />}
                   </a>
                 )
               })}

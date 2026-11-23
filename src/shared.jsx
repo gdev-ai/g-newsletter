@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSite } from './lib/site.jsx'
+import { ArrowUpRight } from 'lucide-react'
 
-export const Arrow = () => <span aria-hidden="true">↗</span>
+export const Arrow = () => <ArrowUpRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} />
 
 // Full-screen message used for loading, "not found" and error states.
 export function StatusScreen({ title, detail, onRetry, busy }) {

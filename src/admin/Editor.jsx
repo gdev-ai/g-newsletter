@@ -7,6 +7,7 @@ import { DEFAULT_DESIGN, FONT_CHOICES } from '../lib/theme.js'
 import { DEFAULT_BRAND, listQuarters, useSite } from '../lib/site.jsx'
 import { btnCls, Field, ghostCls, ImageField, JsonForm, Label, pretty, SectionPicker } from './fields.jsx'
 import GridEditor from './GridEditor.jsx'
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Redo2, Undo2, X } from 'lucide-react'
 
 const GROUPS = [
   ['hero', 'Hero'], ['intro', 'Editor’s note'], ['stories', 'Quarterly highlights'], ['directory', 'Section directory'],
@@ -233,7 +234,7 @@ export default function Editor({ email, onSignOut }) {
     setStatus('')
     setQuarters((list) => list.map((x) => (x.id === d.quarter.id ? { ...x, ...d.quarter } : x)))
     if (reloadError) notify(`Saved, but reloading failed: ${reloadError}`, 'error', 0)
-    else notify(`${okText} ✓`)
+    else notify(okText)
     return true
   }
   const saveRef = useRef(save)
@@ -409,8 +410,8 @@ export default function Editor({ email, onSignOut }) {
               <button className="flex-1 px-4 py-3 text-left text-[13px] hover:bg-neutral-50" onClick={() => { setPage(s.id); push({ name: 'section', sid: s.id }) }}>
                 <span className="mr-2 text-neutral-400">{s.n}</span>{s.title}
               </button>
-              <button className="px-2 text-neutral-500 disabled:opacity-30" disabled={i === 0} onClick={() => moveSection(i, -1)}>↑</button>
-              <button className="px-2 text-neutral-500 disabled:opacity-30" disabled={i === sections.length - 1} onClick={() => moveSection(i, 1)}>↓</button>
+              <button className="px-2 text-neutral-500 disabled:opacity-30" disabled={i === 0} onClick={() => moveSection(i, -1)} aria-label="Move up"><ArrowUp aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
+              <button className="px-2 text-neutral-500 disabled:opacity-30" disabled={i === sections.length - 1} onClick={() => moveSection(i, 1)} aria-label="Move down"><ArrowDown aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
             </div>
           ))}
           <div className="p-4"><button className={ghostCls} onClick={addSection}>+ Add section</button></div>
@@ -556,15 +557,15 @@ export default function Editor({ email, onSignOut }) {
             ))}
           </div>
           <div className="flex overflow-hidden rounded-md border border-neutral-300">
-            <button className="px-2.5 py-1.5 text-[12px] hover:bg-neutral-100 disabled:opacity-30" disabled={!hist.current.past.length} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
-            <button className="border-l border-neutral-300 px-2.5 py-1.5 text-[12px] hover:bg-neutral-100 disabled:opacity-30" disabled={!hist.current.future.length} onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+            <button className="px-2.5 py-1.5 text-[12px] hover:bg-neutral-100 disabled:opacity-30" disabled={!hist.current.past.length} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo"><Undo2 aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
+            <button className="border-l border-neutral-300 px-2.5 py-1.5 text-[12px] hover:bg-neutral-100 disabled:opacity-30" disabled={!hist.current.future.length} onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><Redo2 aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
           </div>
           <span className="flex flex-1 items-center justify-end gap-2 text-[12px]">
             {status ? <span className="text-neutral-500">{status}</span> : dirty ? <><i className="h-2 w-2 rounded-full bg-amber-500" /><span className="text-amber-800">Unsaved changes</span></> : <span className="text-neutral-400">All changes saved</span>}
           </span>
           <StatusBadge q={draft.quarter} />
           <button className={ghostCls} disabled={status === 'Saving…'} onClick={setLive}>{live ? 'Unpublish' : 'Publish now'}</button>
-          <a href={`/q/${loadedSlug}`} target="_blank" rel="noreferrer" className={ghostCls}>{live ? 'View live ↗' : 'Open page ↗'}</a>
+          <a href={`/q/${loadedSlug}`} target="_blank" rel="noreferrer" className={ghostCls}>{live ? 'View live' : 'Open page'} <ArrowUpRight aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></a>
           {dirty && <button className={ghostCls} onClick={discard}>Discard</button>}
           <button className={btnCls} disabled={!dirty || status === 'Saving…'} onClick={() => save()} title="Save (Ctrl+S)">Save</button>
         </div>
@@ -582,7 +583,7 @@ export default function Editor({ email, onSignOut }) {
         {toast && (
           <div role={toast.tone === 'error' ? 'alert' : 'status'} className={`fixed bottom-5 right-5 z-50 flex max-w-[420px] items-start gap-3 rounded-lg px-4 py-3 text-[13px] shadow-xl ${toast.tone === 'error' ? 'bg-red-700 text-white' : toast.tone === 'info' ? 'bg-neutral-800 text-white' : 'bg-emerald-700 text-white'}`}>
             <span className="flex-1">{toast.text}</span>
-            <button className="opacity-70 hover:opacity-100" aria-label="Dismiss" onClick={() => setToast(null)}>✕</button>
+            <button className="opacity-70 hover:opacity-100" aria-label="Dismiss" onClick={() => setToast(null)}><X aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.125em]" strokeWidth={1.75} /></button>
           </div>
         )}
       </div>
