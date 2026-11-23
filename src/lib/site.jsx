@@ -3,6 +3,11 @@ import { supabase, errorText } from './supabase.js'
 import { applyTheme, DEFAULT_DESIGN } from './theme.js'
 import { isCms } from './cms.js'
 import { editionVars, fillDeep, isLive, withContentDefaults } from './edition.js'
+import { STATIC_SITE } from '../content/index.js'
+
+// Edition content comes from the files in src/content unless VITE_CONTENT_SOURCE=supabase.
+// The visual editor (/admin preview) always works on database content.
+export const STATIC = import.meta.env.VITE_CONTENT_SOURCE !== 'supabase' && !isCms
 
 export const DEFAULT_BRAND = {
   wordmark: 'G Developments', headerTag1: 'Quarterly Journal',
@@ -26,10 +31,18 @@ export const useSite = () => useContext(SiteCtx)
 // Loads global settings and the list of published quarters once.
 // Inside the visual editor, the parent window streams a draft that overrides everything.
 export function SiteProvider({ children }) {
-  const [state, setState] = useState({ loading: true, error: '', brand: DEFAULT_BRAND, design: DEFAULT_DESIGN, quarters: [] })
+  const [state, setState] = useState(() => (STATIC
+    ? { loading: false, error: '', brand: { ...DEFAULT_BRAND, ...STATIC_SITE.brand }, design: { ...DEFAULT_DESIGN, ...STATIC_SITE.design }, quarters: STATIC_SITE.editions }
+    : { loading: true, error: '', brand: DEFAULT_BRAND, design: DEFAULT_DESIGN, quarters: [] }))
   const [draft, setDraft] = useState(null)
 
   const load = useCallback(async () => {
+    if (STATIC) {
+      const design = { ...DEFAULT_DESIGN, ...STATIC_SITE.design }
+      applyTheme(design)
+      setState({ loading: false, error: '', brand: { ...DEFAULT_BRAND, ...STATIC_SITE.brand }, design, quarters: STATIC_SITE.editions })
+      return
+    }
     try {
       const [st, qs] = await Promise.all([supabase.from('site_settings').select('key,value'), listQuarters()])
       if (st.error || qs.error) throw st.error || qs.error
@@ -78,7 +91,9 @@ const findTarget = (quarters, slug) => (slug ? quarters.find((q) => q.slug === s
 export function useQuarterData(slug) {
   const { quarters, loading: siteLoading, error: siteError, draft } = useSite()
   const [data, setData] = useState(() => {
-    const hit = !siteLoading && editionCache.get(findTarget(quarters, slug)?.id)
+    const target = !siteLoading && findTarget(quarters, slug)
+    if (STATIC && target) return { loading: false, error: '', quarter: target, sections: target.sections }
+    const hit = target && editionCache.get(target.id)
     return hit ? { loading: false, error: '', ...hit } : { loading: true, error: '', quarter: null, sections: [] }
   })
   const [attempt, setAttempt] = useState(0)
@@ -87,6 +102,7 @@ export function useQuarterData(slug) {
     if (isCms || siteLoading || siteError) return
     const target = findTarget(quarters, slug)
     if (!target) return setData({ loading: false, error: '', quarter: null, sections: [] })
+    if (STATIC) return setData({ loading: false, error: '', quarter: target, sections: target.sections })
     let live = true
     const hit = editionCache.get(target.id)
     setData((d) => (hit ? { loading: false, error: '', ...hit } : { ...d, loading: d.quarter?.id !== target.id, error: '' }))

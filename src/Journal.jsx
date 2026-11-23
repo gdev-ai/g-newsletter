@@ -4,8 +4,8 @@ import { Arrow, Lines, Photo, Reveal, useMeta } from './shared.jsx'
 import { Header, Footer } from './Chrome.jsx'
 import { useSite } from './lib/site.jsx'
 import { cms, isCms } from './lib/cms.js'
-import { supabase } from './lib/supabase.js'
 import { isLive, pad2 } from './lib/edition.js'
+import { pollRespond, pollTally, store } from './lib/engagement.js'
 
 // Alt text editors set per image in the CMS (content.imageAlts.<key>); decorative when empty.
 const altOf = (c, key) => c.imageAlts?.[key] || ''
@@ -47,6 +47,48 @@ function Intro({ c }) {
       <div>
         <Reveal as="p" {...cms('c.intro.quote')} className="font-display text-[clamp(34px,3.3vw,88px)] font-light leading-[1.08] tracking-[-.04em] md:max-w-[44vw]">{i.quote}</Reveal>
         <Reveal as="p" delay={150} {...cms('c.intro.note')} className="mt-14 text-[clamp(13px,.7vw,18px)] leading-[1.8] text-soot/80 md:ml-[14vw] md:max-w-[29vw]">{i.note}</Reveal>
+      </div>
+    </section>
+  )
+}
+
+// Glance strip layout by item count: grid classes, and [columns on md, columns on xl].
+const GLANCE_COLS = { 3: 'md:grid-cols-3', 4: 'md:grid-cols-4', 5: 'md:grid-cols-3 xl:grid-cols-5', 6: 'md:grid-cols-3 xl:grid-cols-6' }
+const GLANCE_SPLIT = { 3: [3, 3], 4: [4, 4], 5: [3, 5], 6: [3, 6] }
+
+// "This quarter at a glance": short calls to action. Each item links to a section (slug), a page anchor
+// or an outside site (url).
+function Glance({ c, base }) {
+  const g = c.glance
+  if (!g?.items?.length) return null
+  return (
+    <section id="glance" className="px-[3.5vw] pt-24">
+      <p {...cms('c.glance.label')} className="meta border-b border-ink pb-3 text-soot">{g.label}</p>
+      <div className={`grid grid-cols-2 ${GLANCE_COLS[g.items.length] || GLANCE_COLS[6]}`}>
+        {g.items.map((it, i) => {
+          const inner = (
+            <>
+              <span {...cms(`c.glance.items.${i}.value`)} className="block font-display text-[clamp(40px,3.4vw,84px)] font-extralight leading-none tracking-[-.05em] tabular-nums">{it.value}</span>
+              <span {...cms(`c.glance.items.${i}.label`)} className="mt-5 block text-[11px] font-medium uppercase tracking-label">{it.label}</span>
+              <span {...cms(`c.glance.items.${i}.note`)} className="mt-2 block text-[13px] leading-[1.6] text-soot/85">{it.note}</span>
+            </>
+          )
+          // Divider lines only between cells; the first cell of each row lines up with the label above.
+          const [md, xl] = GLANCE_SPLIT[g.items.length] || GLANCE_SPLIT[6]
+          const cls = [
+            'group block h-full border-b border-ink/15 py-8 pr-6 transition-colors',
+            i % 2 ? 'border-l pl-6' : 'pl-0',
+            i % md ? 'md:border-l md:pl-6' : 'md:border-l-0 md:pl-0',
+            i % xl ? 'xl:border-l xl:pl-6' : 'xl:border-l-0 xl:pl-0',
+          ].join(' ')
+          return (
+            <Reveal key={i} delay={(i % 6) * 70}>
+              {it.slug ? <Link to={`${base}/section/${it.slug}`} className={`${cls} hover:bg-ink/[.03]`}>{inner}</Link>
+                : it.url ? <a href={it.url} {...(/^https?:/i.test(it.url) ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className={`${cls} hover:bg-ink/[.03]`}>{inner}</a>
+                : <div className={cls}>{inner}</div>}
+            </Reveal>
+          )
+        })}
       </div>
     </section>
   )
@@ -147,7 +189,20 @@ function Directory({ c, sections, base }) {
   )
 }
 
-function AiCorner({ c }) {
+function CopyPrompt({ text }) {
+  const [done, setDone] = useState('')
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setDone('Copied') } catch { setDone('Select the text and press Ctrl+C') }
+    setTimeout(() => setDone(''), 2200)
+  }
+  return (
+    <button type="button" onClick={copy} className="inline-flex items-center gap-3 border border-ink px-4 py-2.5 text-[11px] uppercase tracking-label transition hover:bg-ink hover:text-white">
+      <span aria-live="polite">{done || 'Copy prompt'}</span><span aria-hidden="true">⧉</span>
+    </button>
+  )
+}
+
+function AiCorner({ c, base }) {
   const [open, setOpen] = useState(false)
   const a = c.ai
   return (
@@ -164,31 +219,32 @@ function AiCorner({ c }) {
           </button>
           <div className={`collapse ${open ? 'open' : ''}`}>
             <div>
-              <p {...cms('c.ai.prompt')} className={`px-2 pb-6 text-[13px] leading-[1.8] text-soot transition-all duration-500 ${open ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>{a.prompt}</p>
+              <div className={`px-2 pb-6 transition-all duration-500 ${open ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}>
+                <p {...cms('c.ai.prompt')} className="whitespace-pre-line text-[13px] leading-[1.8] text-soot">{a.prompt}</p>
+                <div className="mt-5"><CopyPrompt text={a.prompt} /></div>
+              </div>
             </div>
           </div>
         </div>
+        {a.responsible && (
+          <p {...cms('c.ai.responsible')} className="mt-8 border-l-2 border-[#334dd2] pl-4 text-[12px] leading-[1.7] text-soot/90 md:max-w-[31vw]">
+            <strong className="font-semibold text-ink">Use AI responsibly. </strong>{a.responsible}
+          </p>
+        )}
+        {a.moreSlug && <Link {...cms('c.ai.moreLabel')} to={`${base}/section/${a.moreSlug}`} className="link-line mt-8 w-[clamp(280px,17vw,380px)] whitespace-nowrap">{a.moreLabel} <Arrow /></Link>}
       </div>
     </section>
   )
 }
 
-// Remembers in this browser that a vote was cast, so readers see the thank-you on return.
-const pollKey = (qid) => `poll-vote:${qid}`
-const myVote = (qid) => { try { return localStorage.getItem(pollKey(qid)) || '' } catch { return '' } }
-const votedHere = (qid) => !!myVote(qid)
+// Remembers in this browser that a vote was cast, so readers see the results on return.
+// The database also keeps one response per browser (see poll_respond in supabase/engagement.sql).
+const pollKey = (slug) => `poll-vote:${slug}`
+const myVote = (slug) => store.get(pollKey(slug)) || ''
 
-// Live tallies for this edition, shown once the reader has voted. Counts only; never who voted.
-function PollResults({ quarter, options, mine }) {
-  const [rows, setRows] = useState(null)
-  useEffect(() => {
-    if (isCms) return undefined
-    let live = true
-    supabase.rpc('poll_counts', { p_quarter: quarter.id }).then(({ data, error }) => live && !error && setRows(data || []))
-    return () => { live = false }
-  }, [quarter.id])
-  if (!rows) return null
-  const count = Object.fromEntries(rows.map((r) => [r.choice, Number(r.votes)]))
+// Live tallies for this edition. Counts only; never who voted. Only this poll's options are shown.
+function PollResults({ options, mine, count }) {
+  if (!count) return null
   const total = options.reduce((n, o) => n + (count[o] || 0), 0)
   if (!total) return null
   return (
@@ -214,23 +270,34 @@ function Poll({ c, base, quarter }) {
   const p = c.poll
   const ch = c.challenge
   const [choice, setChoice] = useState('')
-  const [sent, setSent] = useState(() => votedHere(quarter.id))
-  const [mine, setMine] = useState(() => myVote(quarter.id))
+  const [suggestion, setSuggestion] = useState('')
+  const [mine, setMine] = useState(() => myVote(quarter.slug))
+  const sent = !!mine
+  const [count, setCount] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // A returning voter sees the latest results.
+  useEffect(() => {
+    if (isCms || !mine) return undefined
+    let live = true
+    pollTally(quarter.slug).then((t) => live && setCount(t)).catch(() => {})
+    return () => { live = false }
+  }, [quarter.slug, mine])
   const submit = async (e) => {
     e.preventDefault()
     if (!choice || busy) return
     setBusy(true); setError('')
-    const { error: err } = await supabase.from('poll_votes').insert({ quarter_id: quarter.id, choice })
+    try {
+      setCount(await pollRespond(quarter.slug, choice, suggestion))
+      store.set(pollKey(quarter.slug), choice)
+      setMine(choice)
+    } catch {
+      setError('Your vote could not be sent. Please try again.')
+    }
     setBusy(false)
-    if (err) return setError('Your vote could not be sent. Please try again.')
-    try { localStorage.setItem(pollKey(quarter.id), choice) } catch { /* private mode: still counted */ }
-    setMine(choice)
-    setSent(true)
   }
   return (
-    <section className="grid bg-stone md:grid-cols-[1.75fr_1fr]">
+    <section id="poll" className="grid scroll-mt-20 bg-stone md:grid-cols-[1.75fr_1fr]">
       <div className="px-[6vw] py-24">
         <p {...cms('c.poll.label')} className="label">{p.label}</p>
         <h2 {...cms('c.poll.question')} className="mt-8 text-[clamp(40px,3.9vw,104px)] text-ink">{p.question}</h2>
@@ -238,7 +305,7 @@ function Poll({ c, base, quarter }) {
           <div className="mt-14 max-w-[615px] border-y border-soot/40 py-10">
             <span {...cms('c.poll.thanks')} className="font-display text-[30px] font-light">{p.thanks}</span>
             <p {...cms('c.poll.thanksNote')} className="mt-2 text-[13px] text-soot/90">{p.thanksNote}</p>
-            <PollResults quarter={quarter} options={p.options} mine={mine} />
+            <PollResults options={p.options} mine={mine} count={count} />
           </div>
         ) : (
           <form className="mt-14 max-w-[615px]" onSubmit={submit}>
@@ -251,6 +318,16 @@ function Poll({ c, base, quarter }) {
                   <i className={`h-[14px] w-[14px] rounded-full border border-soot/60 transition peer-focus-visible:ring-2 peer-focus-visible:ring-ink ${choice === o ? 'bg-ink shadow-[inset_0_0_0_3px_rgb(var(--c-stone))]' : ''}`} />
                 </label>
               ))}
+              {p.suggestLabel && (
+                <label className="mt-8 block">
+                  <span {...cms('c.poll.suggestLabel')} className="label text-soot">{p.suggestLabel}</span>
+                  <textarea
+                    value={suggestion} onChange={(e) => setSuggestion(e.target.value)} maxLength={500} rows={2}
+                    placeholder="A story, a team or a topic you’d like to read about"
+                    className="mt-3 w-full resize-y border-b border-soot/40 bg-transparent py-2 text-[14px] text-ink placeholder:text-soot/50 focus:border-ink focus:outline-none"
+                  />
+                </label>
+              )}
             </fieldset>
             {error && <p role="alert" className="mt-6 text-[12px] text-red-700">{error}</p>}
             <button {...cms('c.poll.submit')} disabled={!choice || busy} className="btn btn-dark mt-12 !min-w-[198px] disabled:cursor-not-allowed disabled:opacity-40">
@@ -325,9 +402,10 @@ export default function Journal({ quarter, sections, base }) {
       <main id="main" tabIndex={-1} className="bg-home outline-none">
       <Hero c={c} base={base} />
       <Intro c={c} />
+      <Glance c={c} base={base} />
       <Stories c={c} sections={sections} base={base} />
       <Directory c={c} sections={sections} base={base} />
-      <AiCorner c={c} />
+      <AiCorner c={c} base={base} />
       <Poll c={c} base={base} quarter={quarter} />
       <Archive c={c} list={past} />
       </main>

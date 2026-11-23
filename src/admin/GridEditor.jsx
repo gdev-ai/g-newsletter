@@ -1,7 +1,30 @@
 import { useState } from 'react'
-import { Field, ghostCls, ImageField, Label } from './fields.jsx'
+import { Field, ghostCls, ImageField, inputCls, Label } from './fields.jsx'
+import { BLOCK_TYPES } from '../blocks/Blocks.jsx'
 
-const TYPES = [['image', 'Image'], ['text', 'Text'], ['heading', 'Heading'], ['quote', 'Quote']]
+const TYPES = Object.entries(BLOCK_TYPES).map(([t, d]) => [t, d.label])
+
+// Fields for the richer block types: plain text inputs for strings and numbers, JSON for lists.
+function ContentFields({ content, onChange }) {
+  const [drafts, setDrafts] = useState({})
+  return Object.entries(content).map(([k, v]) => {
+    if (typeof v === 'string' || typeof v === 'number')
+      return <Field key={k} label={k} value={String(v)} onChange={(x) => onChange({ [k]: typeof v === 'number' ? Number(x) || 0 : x })} />
+    const text = drafts[k] ?? JSON.stringify(v, null, 1)
+    let bad = false
+    try { JSON.parse(text) } catch { bad = true }
+    return (
+      <label key={k} className="block">
+        <Label>{k} (JSON)</Label>
+        <textarea rows={6} className={`${inputCls} font-mono text-[11px] ${bad ? 'border-red-500' : ''}`} value={text}
+          onChange={(e) => {
+            setDrafts({ ...drafts, [k]: e.target.value })
+            try { onChange({ [k]: JSON.parse(e.target.value) }) } catch { /* keep editing */ }
+          }} />
+      </label>
+    )
+  })
+}
 const SPANS = [[12, 'Full'], [8, '2/3'], [6, 'Half'], [4, '1/3'], [3, '1/4']]
 
 // Places blocks exactly as CSS grid auto-placement does on desktop (12 columns, row-major),
@@ -55,8 +78,9 @@ export default function GridEditor({ blocks, setBlocks, selId, setSelId }) {
 
   const add = (type) => {
     const id = `new-${Date.now()}`
-    const content = type === 'image' ? { url: '', alt: '', caption: '' } : { text: '' }
-    setBlocks([...blocks, { id, type, col_span: type === 'image' ? 6 : 4, row_span: type === 'image' ? 3 : 2, content }])
+    const content = structuredClone(BLOCK_TYPES[type]?.content || { text: '' })
+    const wide = ['steps', 'challenge'].includes(type)
+    setBlocks([...blocks, { id, type, col_span: wide ? 12 : type === 'image' ? 6 : 4, row_span: type === 'image' ? 3 : 2, content }])
     setSelId(id)
   }
   const move = (d) => {
@@ -137,8 +161,10 @@ export default function GridEditor({ blocks, setBlocks, selId, setSelId }) {
               <Field label="Caption" value={b.content.caption} onChange={(v) => updContent({ caption: v })} multiline={false} />
               <Field label="Alt text" value={b.content.alt} onChange={(v) => updContent({ alt: v })} multiline={false} />
             </>
-          ) : (
+          ) : ['text', 'heading'].includes(b.type) ? (
             <Field label="Text" value={b.content.text} onChange={(v) => updContent({ text: v })} multiline rows={4} />
+          ) : (
+            <ContentFields key={b.id} content={{ ...(BLOCK_TYPES[b.type]?.content || {}), ...b.content }} onChange={updContent} />
           )}
         </div>
       )}

@@ -1,37 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
-import { Lines, Photo, Reveal, useMeta } from './shared.jsx'
+import { Photo, Reveal, useMeta } from './shared.jsx'
 import { ArticleHeader, Footer } from './Chrome.jsx'
 import { supabase } from './lib/supabase.js'
 import { useSite } from './lib/site.jsx'
 import { cms, isCms } from './lib/cms.js'
 import { pad2 } from './lib/edition.js'
+import { BlockGrid } from './blocks/Blocks.jsx'
 
-// Renders the 12-column content grid for a section (also used by the admin preview).
-export function BlockGrid({ blocks }) {
-  if (!blocks?.length) return null
-  return (
-    <div className="grid grid-cols-1 gap-4 md:auto-rows-[96px] md:grid-cols-12">
-      {blocks.map((b) => {
-        const style = { '--cs': b.col_span, '--rs': b.row_span }
-        const cell = 'md:[grid-column:span_var(--cs)] md:[grid-row:span_var(--rs)] min-h-[160px] md:min-h-0'
-        const c = b.content || {}
-        if (b.type === 'image')
-          return (
-            <figure key={b.id} style={style} data-cms={`b.${b.id}`} className={`${cell} relative overflow-hidden bg-stone`}>
-              <Photo src={c.url} alt={c.alt} className="absolute inset-0" />
-              {c.caption && <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 text-[11px] uppercase tracking-[.12em] text-white">{c.caption}</figcaption>}
-            </figure>
-          )
-        if (b.type === 'heading')
-          return <h3 key={b.id} style={style} data-cms={`b.${b.id}`} className={`${cell} flex items-end text-[clamp(32px,3.6vw,56px)]`}><Lines>{c.text}</Lines></h3>
-        if (b.type === 'quote')
-          return <blockquote key={b.id} style={style} data-cms={`b.${b.id}`} className={`${cell} flex items-center bg-ink p-8 font-display text-[clamp(22px,2.4vw,36px)] font-light leading-[1.15] tracking-[-.03em] text-white`}>“{c.text}”</blockquote>
-        return <p key={b.id} style={style} data-cms={`b.${b.id}`} className={`${cell} overflow-hidden text-[15px] leading-[1.9] text-soot/90`}><Lines>{c.text}</Lines></p>
-      })}
-    </div>
-  )
-}
+export { BlockGrid }
 
 // Thin bar along the top showing how far through the page the reader is.
 function ReadingProgress() {
@@ -86,7 +63,8 @@ export default function Section({ quarter, sections, base }) {
   const sid = new URLSearchParams(search).get('sid')
   const s = (sid && sections.find((x) => x.id === sid)) || sections.find((x) => x.slug === slug)
   const [fetched, setBlocks] = useState([])
-  const blocks = isCms ? (draft?.blocks?.[s?.id] || []) : fetched
+  // Static editions carry their blocks inline; CMS editions load them from the database.
+  const blocks = isCms ? (draft?.blocks?.[s?.id] || []) : (s?.blocks || fetched)
   useMeta({
     title: s ? `${s.title || s.short} — ${quarter.label} · ${brand.wordmark}` : '',
     description: s?.descr || s?.headline,
@@ -96,7 +74,7 @@ export default function Section({ quarter, sections, base }) {
   })
 
   useEffect(() => {
-    if (!s || isCms) return undefined
+    if (!s || isCms || s.blocks) return undefined
     let live = true
     setBlocks([])
     supabase.from('section_blocks').select('*').eq('section_id', s.id).order('position')
@@ -140,13 +118,26 @@ export default function Section({ quarter, sections, base }) {
             <span className="text-right">{s.read_min ? `${s.read_min} min` : ''}</span>
           </div>
           <p {...cms(`s.${s.id}.title`)} className={`${micro} hero-in mt-[clamp(28px,3.1vw,84px)] font-semibold text-ink`} style={{ '--d': '80ms' }}>{s.title}</p>
-          <h1 {...cms(`s.${s.id}.headline`)} className="hero-in mt-[clamp(16px,1.6vw,44px)] pb-[.08em] text-[clamp(52px,7.4vw,200px)] leading-[.88] tracking-[-.055em] md:max-w-[58vw]" style={{ '--d': '200ms' }}>
+          <h1 {...cms(`s.${s.id}.headline`)} className="hero-in mt-[clamp(16px,1.6vw,44px)] pb-[.08em] text-[clamp(48px,6vw,160px)] leading-[.88] tracking-[-.045em] md:max-w-[58vw]" style={{ '--d': '200ms' }}>
             {s.headline}
           </h1>
           {show(s.descr) && (
             <p {...cms(`s.${s.id}.descr`)} className="hero-in mt-8 font-display text-[clamp(18px,.9vw,26px)] font-light leading-[1.45] text-soot/80 md:ml-auto md:mt-[clamp(8px,.6vw,16px)] md:max-w-[39%]" style={{ '--d': '340ms' }}>
               {s.descr}
             </p>
+          )}
+          {s.links?.length > 0 && (
+            <div className="hero-in mt-10 flex flex-wrap gap-3 md:ml-auto md:max-w-[39%]" style={{ '--d': '420ms' }}>
+              {s.links.map((l, k) => {
+                const ext = /^https?:\/\//i.test(l.url)
+                return (
+                  <a key={k} href={l.url} {...(ext ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                    className={`inline-flex items-center gap-4 border border-ink px-5 py-3 text-[11px] uppercase tracking-[.13em] transition ${k === 0 ? 'bg-ink text-white hover:bg-transparent hover:text-ink' : 'hover:bg-ink hover:text-white'}`}>
+                    {l.label} <span aria-hidden="true">{ext ? '↗' : '→'}</span>
+                  </a>
+                )
+              })}
+            </div>
           )}
         </section>
 

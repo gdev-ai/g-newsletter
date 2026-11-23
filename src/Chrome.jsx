@@ -116,17 +116,15 @@ export function ArticleHeader({ base, issueNo }) {
 
 export function Footer() {
   const { brand } = useSite()
-  const email = brand.emailLabel
   return (
     <footer className="bg-ink px-[3.5vw] pb-8 pt-20 text-white">
       <div className="grid items-start gap-8 md:grid-cols-3">
         <Wordmark className="!text-[22px]" />
-        <div className="text-[11px] uppercase leading-[1.8] tracking-[.12em] text-white/70">
+        <div className="text-[11px] uppercase leading-[1.8] tracking-[.12em] text-white/70 md:text-center">
           <span data-cms="brand.footerNote1">{brand.footerNote1}</span><br /><span data-cms="brand.footerNote2">{brand.footerNote2}</span>
         </div>
         <div className="flex flex-wrap gap-8 text-[11px] uppercase tracking-[.12em] md:justify-end">
-          {email ? <a href="/email.html" target="_blank" rel="noopener" data-cms="brand.emailLabel" className="border-b border-white/50 pb-1 transition hover:border-white">{email} <span aria-hidden="true">↗</span></a> : null}
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="border-b border-white pb-1">Back to top ↑</button>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="border-b border-white pb-1 uppercase">Back to top ↑</button>
         </div>
       </div>
       <div className="mt-24 border-t border-white/15 pt-6 text-[11px] uppercase tracking-[.12em] text-white/60" data-cms="brand.copyright">{brand.copyright}</div>

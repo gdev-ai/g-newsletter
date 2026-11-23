@@ -18,8 +18,10 @@
 @layer components {
   .label { @apply text-[11px] uppercase tracking-label font-medium; }
   .meta { @apply text-[11px] uppercase tracking-[.12em]; }
-  .link-line { @apply inline-flex items-center justify-between gap-10 border-b border-current pb-1 text-[11px] uppercase tracking-[.12em] transition-all duration-300; }
-  .link-line:hover { @apply gap-12 opacity-70; }
+  .link-line { @apply inline-flex items-center justify-between gap-10 whitespace-nowrap border-b border-current pb-1 text-[11px] uppercase tracking-[.12em] transition-all duration-300; }
+  .link-line > :last-child { @apply transition-transform duration-300; }
+  .link-line:hover { @apply opacity-70; }
+  .link-line:hover > :last-child { @apply translate-x-2; }
   .btn { @apply flex min-w-[215px] items-center justify-between border border-white bg-white px-[18px] py-4 text-[11px] uppercase tracking-[.13em] text-ink transition-all duration-300; }
   .btn:hover { @apply bg-transparent text-white; }
   .btn-dark { @apply border-ink bg-ink text-white; }

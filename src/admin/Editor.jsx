@@ -488,7 +488,7 @@ export default function Editor({ email, onSignOut }) {
     if (cur.name === 'brand')
       return (
         <div className="space-y-5 p-4">
-          {[['wordmark', 'Wordmark text'], ['headerTag1', 'Header tag'], ['footerNote1', 'Footer line 1'], ['footerNote2', 'Footer line 2'], ['copyright', 'Copyright'], ['emailLabel', 'Footer email link text (empty hides it)'], ['photoCaption', 'Caption under section cover photos']].map(([k, l]) => (
+          {[['wordmark', 'Wordmark text'], ['headerTag1', 'Header tag'], ['footerNote1', 'Footer line 1'], ['footerNote2', 'Footer line 2'], ['copyright', 'Copyright'], ['photoCaption', 'Caption under section cover photos']].map(([k, l]) => (
             <Field key={k} label={l} value={draft.brand[k]} onChange={(v) => setPath(`brand.${k}`, v)} multiline={false} />
           ))}
           <ImageField label="Logo image (replaces wordmark)" value={draft.brand.logoUrl} onChange={(v) => setPath('brand.logoUrl', v)} />

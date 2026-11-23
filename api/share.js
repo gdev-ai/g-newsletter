@@ -9,6 +9,10 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { editionVars, fillDeep, isLive, withContentDefaults } from '../src/lib/edition.js'
+import { STATIC_SITE } from '../src/content/index.js'
+
+// Same switch as the app (src/lib/site.jsx): static content unless VITE_CONTENT_SOURCE=supabase.
+const STATIC = (process.env.VITE_CONTENT_SOURCE || '') !== 'supabase'
 
 const SB_URL = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').replace(/\/+$/, '')
 const SB_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ''
@@ -52,11 +56,13 @@ const dropMeta = (html, key) => html.replace(new RegExp(`\\s*<meta\\s+property="
 // Works out the preview for the URL; null keeps the site-wide defaults.
 async function previewFor(q, slug, origin) {
   // No edition in the URL: the newest live one, as the home page shows.
-  const quarter = q
-    ? (await rest(`quarters?slug=eq.${encodeURIComponent(q)}&select=*&limit=1`))[0]
-    : (await rest('quarters?select=*&order=sort.desc&limit=20')).find((x) => isLive(x))
-  if (!quarter) return null
-  const [settings] = await rest('site_settings?key=eq.brand&select=value&limit=1')
+  const quarter = STATIC
+    ? (q ? STATIC_SITE.editions.find((x) => x.slug === q) : STATIC_SITE.editions.find((x) => isLive(x)))
+    : q
+      ? (await rest(`quarters?slug=eq.${encodeURIComponent(q)}&select=*&limit=1`))[0]
+      : (await rest('quarters?select=*&order=sort.desc&limit=20')).find((x) => isLive(x))
+  if (!quarter || !isLive(quarter)) return null
+  const [settings] = STATIC ? [{ value: STATIC_SITE.brand }] : await rest('site_settings?key=eq.brand&select=value&limit=1')
   const wordmark = settings?.value?.wordmark || 'G Developments'
   const content = withContentDefaults(quarter.content)
   const vars = editionVars({ ...quarter, content })
@@ -74,7 +80,9 @@ async function previewFor(q, slug, origin) {
       type: 'website',
     }
 
-  const [raw] = await rest(`sections?quarter_id=eq.${quarter.id}&slug=eq.${encodeURIComponent(slug)}&select=*&limit=1`)
+  const [raw] = STATIC
+    ? quarter.sections.filter((x) => x.slug === slug)
+    : await rest(`sections?quarter_id=eq.${quarter.id}&slug=eq.${encodeURIComponent(slug)}&select=*&limit=1`)
   if (!raw) return null
   const s = fillDeep(raw, vars)
   return {
