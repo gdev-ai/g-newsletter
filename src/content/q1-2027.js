@@ -21,7 +21,7 @@ const LINKS = {
   gdGuidelines: 'https://newgiza87182655gdevelopment.sharepoint.com/sites/BrandBox/Shared%20Documents/Branding%20Elements/GuideLines/G%20DEVELOPMENTS%20Brand%20Guidelines%20Updated%20-%20Feb%202026.pdf',
 }
 
-const RESPONSIBLE_AI = 'Use company-approved tools. Never paste confidential, client or personal information into a prompt. Always read and check what AI gives you before you use it.'
+const RESPONSIBLE_AI = 'Use AI responsibly: verify key information, and never share confidential company data through unapproved AI tools. AI is a starting point, not the final word.'
 
 const sections = [
   // ---------------------------------------------------------------- 01
@@ -362,50 +362,119 @@ const sections = [
   // ---------------------------------------------------------------- 09
   {
     id: `${EDITION}-s9`,
-    slug: 'ai-corner',
+    slug: 'ai-enablement',
     n: '09',
     position: 9,
-    title: 'AI Corner',
-    short: 'Work smarter with AI',
-    descr: 'The best of the Transformation Office’s AI Weekly Tips: prompts you can copy and use today.',
-    headline: 'Small prompts. Real time back.',
-    quote: 'Start small: one routine task, one good prompt. Confidence follows.',
+    title: 'AI Enablement',
+    short: 'AI Weekly Tips',
+    descr: 'One idea, one prompt and one small challenge every week from the Transformation Office. Here is the series so far, with every prompt ready to copy.',
+    headline: 'Work smarter. Think bigger. Transform together.',
+    quote: 'Don’t just teach AI what to do. Teach it what good looks like.',
     photo_url: '/images/ai.png',
-    read_min: 4,
-    // Owner: Amr, Transformation Office. Sources: AI Weekly Tips initiative; AI & Development Monthly Review, Nov 2026.
+    read_min: 7,
+    // Owner: Amr, Transformation Office. Source: the AI Weekly Tip and Digital Enablement emails, used as sent.
+    // Sent every Sunday: W1 18 Oct, W2 25 Oct, W3 1 Nov (OneDrive & SharePoint), W4 8 Nov, W5 15 Nov, W6 22 Nov 2026.
     body: [
-      'Every week the Transformation Office shares an AI tip: one use case, one technique, something you can try in five minutes. Here are the ones that saved people the most time this quarter.',
-      'The pattern behind every good prompt is the same: say who the answer is for, give the context, ask for a format, and set the length. The prompts below follow it, so copy one, paste your own material where it says, and adjust.',
-      'Our own AI is growing too. Brand Box answers brand questions from our own guidelines, and the team is now testing a new kind of small, fast model that checks and routes routine decisions so a person only looks at the ones that need judgement.',
+      'Using AI well comes down to three habits: ask clearly, check what you get, and keep company data safe.',
+      'AI Enablement is how the Transformation Office helps everyone at G build those habits. Its best-known part is the AI Weekly Tip: a short email with one idea, a prompt you can copy, and a small challenge to try that same week.',
+      'Every Sunday since 18 October, the series has moved from what makes a good prompt to asking AI to challenge your thinking, turning information into clear visuals, giving AI a quality checklist so it checks its own work, and verifying its facts before you rely on them. Every tip is collected below, newest first, so you can catch up on any you missed.',
+      'Week 3 was a Digital Enablement guide to tools we already have: how to share any file safely through OneDrive and SharePoint instead of email attachments or outside transfer sites.',
     ],
     points: [
-      ['Who', 'Tell AI who the answer is for.'],
-      ['What', 'Give it the context and the material.'],
-      ['How', 'Ask for a format and a length.'],
+      ['Ask clearly', 'Role, context, task and format: the four ingredients of a better prompt.'],
+      ['Check the result', 'Give AI a checklist, and verify facts before you use them.'],
+      ['Keep data safe', 'Use approved tools only. Never share confidential company data.'],
     ],
     blocks: [
-      block('prompt', 6, {
-        title: 'Turn a long email thread into actions',
-        prompt: 'You are my assistant. Read the email thread below and give me:\n1. A two-sentence summary of what was decided.\n2. A table of action items with owner and due date.\n3. Any open questions nobody answered.\n\nThread:\n[paste the thread here]',
-        note: 'Remove client and personal details before pasting.',
-      }, 4),
-      block('prompt', 6, {
-        title: 'Meeting notes to a clean recap',
-        prompt: 'Turn these rough meeting notes into a short recap email for the attendees. Use three headings: Decisions, Actions (with owners), Next meeting. Keep it under 150 words and use a friendly, professional tone.\n\nNotes:\n[paste your notes here]',
-        note: 'Works well with Teams meeting notes.',
-      }, 4),
-      block('prompt', 6, {
-        title: 'Explain an Excel formula',
-        prompt: 'Explain what this Excel formula does in plain English, step by step, as if to someone new to Excel. Then suggest a simpler version if there is one.\n\nFormula:\n[paste the formula here]',
-        note: '',
-      }, 4),
-      block('prompt', 6, {
-        title: 'Make it clearer',
-        prompt: 'Rewrite the text below so it is clear and concise for a busy reader. Keep the meaning and every fact. Use short sentences, put the main point first, and list any requests as bullets.\n\nText:\n[paste your text here]',
-        note: '',
-      }, 4),
-      block('note', 8, { title: 'Use AI responsibly', text: RESPONSIBLE_AI }, 2),
-      block('link', 4, { tag: 'Try it', title: 'Ask Brand Box', desc: 'Get logos and brand guidelines from our own documents.', url: LINKS.brandBox, cta: 'Open' }, 2),
+      block('heading', 12, { text: 'AI Weekly Tips' }, 1),
+      block('tip', 12, {
+        week: 'Week 6',
+        title: 'Always verify AI information.',
+        idea: 'AI is a powerful assistant, but it can sometimes be inaccurate. A quick check helps you stay correct and professional.',
+        items: [
+          ['Facts & numbers', 'Data, statistics, financials.'],
+          ['Company information', 'Policies, processes, contacts.'],
+          ['External sources', 'Market news, regulations.'],
+          ['Critical decisions', 'Legal, financial or client-related.'],
+        ],
+        prompt: 'List the key facts in this answer and give me trusted sources I can verify.',
+        takeaway: 'Use AI as a starting point, not the final word.',
+      }),
+      block('tip', 12, {
+        week: 'Week 5',
+        title: 'Teach AI to check its own work.',
+        idea: 'Tired of giving AI the same feedback? “Make it shorter.” “Use a more professional tone.” “You missed an important detail.”\nAn AI Eval is a simple checklist that tells AI exactly what a good result looks like. Define your standards once, and ask AI to review and improve its draft against them. No coding, no technical skills: just clearer instructions.',
+        items: [
+          ['Show examples', 'Share emails, reports or presentations you’ve previously approved.'],
+          ['Define standards', 'Simple Yes/No checks: Is it clear and concise? Are owners and deadlines included? Do facts match the source?'],
+          ['Review and improve', 'Ask AI to evaluate its draft, fix anything that fails and repeat before showing you.'],
+          ['Save and reuse', 'Keep the checklist in your AI tool’s project instructions or a template.'],
+        ],
+        prompt: 'Act as my AI quality reviewer. Review the following draft against these standards: clarity, conciseness, professional tone, factual accuracy, and completeness of actions and deadlines.\nCreate a Yes/No checklist for each standard. Identify anything that fails, improve the draft, and repeat the review until all checks pass.\nDo not invent information or commitments. Flag anything that requires my confirmation.\nShow me the final improved version with a brief quality checklist.\n\nDraft:\n[paste your draft here]',
+        takeaway: 'Don’t just teach AI what to do. Teach it what good looks like.',
+      }),
+      block('prompt', 12, {
+        label: 'Week 5 · Take it one step further',
+        title: 'Teach AI to write more like you',
+        prompt: 'Compare the original and final versions below. Identify the changes I consistently make to tone, structure, wording, and length. Turn those patterns into a reusable checklist for reviewing future drafts.\n\n[paste three pairs: the AI draft and the version you actually sent]',
+        note: 'Your edits reveal your preferences. Your checklist helps AI apply them consistently.',
+      }, 2),
+      block('tip', 12, {
+        week: 'Week 4',
+        title: 'Turn information into clear visuals with AI.',
+        idea: 'Make your ideas, data and plans easier to understand, and more impactful, with AI-generated visuals.',
+        items: [
+          ['Process flows', 'Turn steps and procedures into clear diagrams.'],
+          ['Project plans', 'Convert your ideas into structured timelines.'],
+          ['Data visuals', 'Transform data into charts and simple insights.'],
+          ['Presentations', 'Create slide layouts and visuals from your content.'],
+        ],
+        prompt: 'Turn these project tasks into a simple Gantt chart and highlight key milestones.\n\n[paste your tasks and dates here]',
+        task: 'Take a piece of information from your work (a process, plan, data set or update) and use AI to turn it into a clear visual. Share it with your team and see the difference.',
+      }),
+      block('tip', 12, {
+        week: 'Week 2',
+        title: 'Don’t just ask AI to agree with you. Ask it to challenge you.',
+        idea: 'Use AI as a thought partner to uncover blind spots, explore different perspectives and strengthen your ideas before making a decision.',
+        items: [
+          ['Strategic decisions', 'Test your strategy, explore risks and alternative scenarios.'],
+          ['Business cases', 'Challenge assumptions, financials and expected outcomes.'],
+          ['Presentations', 'Get a stronger narrative; anticipate questions and objections.'],
+          ['Everyday work', 'Improve ideas, solve problems, get new perspectives.'],
+        ],
+        instead: 'Do you think this project is a good idea?',
+        better: 'Act as a critical advisor. Review my proposal and challenge my thinking. Highlight potential risks, weaknesses, assumptions, and alternative approaches. Then give me a balanced recommendation.',
+        task: 'Take a current project, decision or idea you’re working on and use the “critical advisor” prompt. See what new insights, risks or alternative approaches you discover.',
+      }),
+      block('tip', 12, {
+        week: 'Week 1',
+        title: 'Better prompts. Better results.',
+        idea: 'The quality of your AI output depends on the quality of your instructions.',
+        items: [
+          ['Role', 'Tell AI who to act as.'],
+          ['Context', 'Explain the situation and background.'],
+          ['Task', 'Specify exactly what you need.'],
+          ['Format', 'Define how you want the answer presented.'],
+        ],
+        instead: 'Write an email about my project.',
+        better: 'Act as a project manager. Draft a professional email to senior management summarizing our project’s progress, key challenges, pending decisions, and next steps. Keep it concise, structured, and action-oriented.',
+        task: 'Take one task you normally do manually (drafting an email, summarizing a document, or preparing a report) and try the four-step formula. See how much time you can save.',
+      }),
+      block('note', 12, { title: 'Remember', text: RESPONSIBLE_AI }, 1),
+
+      block('heading', 12, { text: 'Digital Enablement' }, 1),
+      block('steps', 12, {
+        title: 'Week 3 · OneDrive & SharePoint: share smarter, stay secure',
+        items: [
+          ['Save your file', 'Save it to OneDrive, or to your team’s SharePoint site.'],
+          ['Select it and click Share', 'Choose the file or folder, then click Share.'],
+          ['Set the link settings', 'Choose Specific people, set permissions (view or edit) and an expiration date where available.'],
+          ['Share the link', 'Click Copy link and share it through Outlook or Teams.'],
+        ],
+      }),
+      block('note', 6, { title: 'Good to know', text: 'Send any file, of any size, without email attachments.\nKeep sensitive information within G Developments.\nSet links to expire, or to view-only, when that is all people need.\nReview and remove access at any time.' }, 1),
+      block('note', 6, { title: 'Avoid these common mistakes', tone: 'warn', text: 'Using external file transfer tools (e.g. WeTransfer).\nSharing with “Anyone” when it isn’t necessary.\nLeaving access open after a project ends.' }, 1),
+      block('link', 12, { tag: 'Need help?', title: 'IT service desk', desc: 'Questions about OneDrive, SharePoint or sharing settings? Raise a request with IT.', url: LINKS.itSupport, cta: 'Open the service desk' }, 2),
     ],
   },
 
@@ -480,7 +549,7 @@ export default {
         { value: 'Ask', label: 'Brand Box', note: 'Get the latest logos and guidelines in seconds.', url: LINKS.brandBox },
         { value: 'Submit', label: 'Your employee photo', note: 'Refresh your badge and your Outlook and Teams profile.', url: LINKS.hrPortal },
         { value: 'Raise', label: 'Any IT request', note: 'One portal for IT, Transformation and Business Applications.', url: LINKS.itSupport },
-        { value: 'Try', label: 'An AI prompt', note: 'Copy, paste your material, and save time today.', slug: 'ai-corner' },
+        { value: 'Try', label: 'This week’s AI tip', note: 'Every AI Weekly Tip so far, with prompts ready to copy.', slug: 'ai-enablement' },
         { value: 'Vote', label: 'On our next issue', note: 'Pick what we cover next quarter.', url: '#poll' },
         { value: 'Play', label: 'The G Challenge', note: 'One Sudoku. The fastest correct solve wins.', slug: 'take-a-break' },
       ],
@@ -503,14 +572,14 @@ export default {
     },
     directory: { label: 'In this issue', title: '{count} perspectives\non the quarter' },
     ai: {
-      label: 'AI Corner',
+      label: 'AI Enablement',
       title: 'Idea of the quarter',
-      desc: 'Turn a long email thread into decisions and actions in seconds. Copy the prompt, paste your thread where it says, and check the result before you send it on.',
+      desc: 'Don’t just ask AI to agree with you. Ask it to challenge you. Use AI as a critical advisor to find the risks, assumptions and alternatives you might have missed, before you decide.',
       promptLabel: 'Try this prompt',
-      prompt: 'You are my assistant. Read the email thread below and give me:\n1. A two-sentence summary of what was decided.\n2. A table of action items with owner and due date.\n3. Any open questions nobody answered.\n\nThread:\n[paste the thread here]',
+      prompt: 'Act as a critical advisor. Review my proposal and challenge my thinking. Highlight potential risks, weaknesses, assumptions, and alternative approaches. Then give me a balanced recommendation.\n\nProposal:\n[paste your proposal here]',
       responsible: RESPONSIBLE_AI,
-      moreLabel: 'More prompts in AI Corner',
-      moreSlug: 'ai-corner',
+      moreLabel: 'All AI Weekly Tips',
+      moreSlug: 'ai-enablement',
     },
     poll: {
       label: 'Your voice matters',

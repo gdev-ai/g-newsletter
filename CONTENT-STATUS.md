@@ -20,12 +20,12 @@ Numbering, the home page directory and the "at a glance" strip adjust on their o
 | 05 | G Communities | Live | Maya | G Communities Brand Identity Guidelines 2026; delivery tracking and CX survey (AI & Dev review) | Expansion news and new resident services; community photos; the G Communities website address (gcommunities.com is a parked domain, not ours) |
 | 06 | Wellness Corner | Live | Abby & Aya Ghobashy | "Alt+Ctrl+Breathe" by Aya Ghobashy (image-only deck, so the tips are drafted from its topics); Pink October | Aya to check the tips match her session; a shareable link to the deck so readers can open it in full |
 | 07 | Brand Box | Live | Ahmad Taha | Brand Box guideline library; G Developments Brand Guidelines (Feb 2026); G Communities guidelines | Confirm brand facts used in the quizzes; confirm the G Communities guideline is in Brand Box (not found there) so it can be linked |
-| 08 | AI Corner | Live | Amr | AI Weekly Tips; AI & Dev review | Swap in the quarter's best weekly tips if preferred |
+| 08 | AI Enablement | Live | Amr | AI Weekly Tip emails, Weeks 1–6 (sent Sundays 18 Oct – 22 Nov 2026; Week 3 was the OneDrive & SharePoint guide), used as sent | A link for "Access the full guide & session recording" from the OneDrive guide |
 | 09 | Take a Break | Live | Transformation Office | G Challenge (Sudoku) | The prize, and the closing date |
 
 ## Written by us, to confirm
 
-- Pull quotes in Transformation Office, People & Culture, Wellness Corner, AI Corner and Take a Break are our wording, not quotes from a person. Swap in a real quote (with name and title) if the owner has one.
+- Pull quotes in Transformation Office, People & Culture, Wellness Corner and Take a Break are our wording, not quotes from a person. Swap in a real quote (with name and title) if the owner has one.
 - G Communities stats "5 steps at the gate" and "1 survey per resident" summarise the AI & Dev review; Maya to confirm.
 - Take a Break prize line says the winner is "announced in the next edition"; confirm once the prize is decided.
 
@@ -40,7 +40,7 @@ Section headers carry buttons (`links` in each section) and link cards open in a
 | Our projects | www.thegdevelopments.com/community | 02 |
 | Careers portal | careers.thegdevelopments.com | 04 |
 | HR portal | hrp.thegdevelopments.com | 04 |
-| Brand Box | SharePoint /sites/BrandBox (company sign-in) | 01, 07, 08 |
+| Brand Box | SharePoint /sites/BrandBox (company sign-in) | 01, 07 |
 | G Developments Brand Guidelines (Feb 2026, PDF) | Brand Box › Branding Elements › GuideLines | 07 |
 
 Links still wanted:

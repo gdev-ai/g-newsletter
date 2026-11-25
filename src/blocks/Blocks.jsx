@@ -14,6 +14,7 @@ export const BLOCK_TYPES = {
   stat: { label: 'Stat', content: { value: '', label: '', note: '' } },
   steps: { label: 'Steps', content: { title: '', items: [['', '']] } },
   prompt: { label: 'AI prompt', content: { label: 'Try this prompt', title: '', prompt: '', note: '' } },
+  tip: { label: 'AI weekly tip', content: { week: '', title: '', idea: '', items: [['', '']], instead: '', better: '', prompt: '', task: '', takeaway: '' } },
   link: { label: 'Link card', content: { tag: '', title: '', desc: '', url: '', cta: 'Open' } },
   video: { label: 'Video', content: { url: '', caption: '', poster: '' } },
   quiz: { label: 'Quiz', content: { question: '', options: ['', ''], answer: 0, explain: '' } },
@@ -92,6 +93,64 @@ function Prompt({ c }) {
         {has(c.note) && <p className="max-w-[60%] text-[12px] leading-[1.6] text-soot/80">{c.note}</p>}
       </div>
     </div>
+  )
+}
+
+// One AI Weekly Tip, as sent by email: the idea, its key points, "instead of / try this",
+// a prompt to copy and the week's challenge (task). Every part is optional.
+function Tip({ c }) {
+  const items = (c.items || []).filter(([t, d]) => has(t) || has(d))
+  const compare = has(c.instead) && has(c.better)
+  return (
+    <article className="grid h-full gap-x-[clamp(24px,3vw,72px)] gap-y-10 border-t border-ink pt-[clamp(20px,1.6vw,36px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <div>
+        <p className={`${micro} text-soot/80`}>AI Weekly Tip{has(c.week) && <> · <span className="text-ink">{c.week}</span></>}</p>
+        <h3 className="mt-4 text-[clamp(28px,2.4vw,52px)] !leading-[1.05]">{c.title}</h3>
+        {has(c.idea) && <p className="mt-5 text-[15px] leading-[1.85] text-soot/90"><Lines>{c.idea}</Lines></p>}
+        {items.length > 0 && (
+          <ol className="mt-8 grid gap-x-6 sm:grid-cols-2">
+            {items.map(([t, d], i) => (
+              <li key={i} className="border-t border-ink/15 py-4">
+                <span className="text-[11px] tabular-nums text-soot/70">{String(i + 1).padStart(2, '0')}</span>
+                <p className="mt-1 font-display text-[18px] font-normal tracking-[-.02em] text-ink">{t}</p>
+                {has(d) && <p className="mt-1 text-[13px] leading-[1.65] text-soot/90">{d}</p>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+      <div className="flex flex-col gap-5">
+        {compare && (
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
+            <div className="border border-ink/15 p-4">
+              <p className={`${micro} text-soot/70`}>Instead of asking</p>
+              <p className="mt-3 text-[14px] leading-[1.7] text-soot/70">“{c.instead}”</p>
+            </div>
+            <div className="border border-ink bg-white p-4">
+              <p className={`${micro} text-ink`}>Try this</p>
+              <p className="mt-3 text-[14px] leading-[1.7] text-ink">“{c.better}”</p>
+              <div className="mt-4"><CopyButton text={c.better} /></div>
+            </div>
+          </div>
+        )}
+        {has(c.prompt) && (
+          <div className="border border-ink/25 bg-white p-[clamp(16px,1.2vw,28px)]">
+            <p className={`${micro} text-soot/80`}>Try this prompt</p>
+            <pre className="mt-4 whitespace-pre-wrap break-words bg-paper p-4 font-sans text-[14px] leading-[1.75] text-ink">{c.prompt}</pre>
+            <div className="mt-4"><CopyButton text={c.prompt} /></div>
+          </div>
+        )}
+        {has(c.task) && (
+          <div className="bg-ink p-[clamp(16px,1.2vw,28px)] text-white">
+            <p className={`${micro} text-white/60`}>Your AI challenge</p>
+            <p className="mt-3 text-[14px] leading-[1.75]">{c.task}</p>
+          </div>
+        )}
+        {has(c.takeaway) && (
+          <p className="border-l-2 border-[#334dd2] pl-4 font-display text-[clamp(18px,1.2vw,24px)] font-light leading-[1.35] tracking-[-.02em] text-ink">{c.takeaway}</p>
+        )}
+      </div>
+    </article>
   )
 }
 
@@ -190,6 +249,7 @@ export function Block({ b }) {
     case 'stat': return <Stat c={c} />
     case 'steps': return <Steps c={c} />
     case 'prompt': return <Prompt c={c} />
+    case 'tip': return <Tip c={c} />
     case 'link': return <LinkCard c={c} />
     case 'video': return <Video c={c} />
     case 'quiz': return <Quiz c={c} />

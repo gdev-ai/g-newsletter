@@ -11,7 +11,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Redo2, Undo2, X } from 'lu
 
 const GROUPS = [
   ['hero', 'Hero'], ['intro', 'Editor’s note'], ['stories', 'Quarterly highlights'], ['directory', 'Section directory'],
-  ['ai', 'AI Corner'], ['poll', 'Poll'], ['challenge', 'Take a break'], ['archive', 'Archive'], ['images', 'All images'],
+  ['ai', 'AI Enablement'], ['poll', 'Poll'], ['challenge', 'Take a break'], ['archive', 'Archive'], ['images', 'All images'],
 ]
 const COLORS = [['home', 'Home page background'], ['paper', 'Reading page background'], ['stone', 'Panel background'], ['ink', 'Text & dark sections'], ['soot', 'Secondary text']]
 const DEVICES = { desktop: '100%', tablet: '768px', mobile: '390px' }

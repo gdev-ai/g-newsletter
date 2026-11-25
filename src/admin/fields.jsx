@@ -64,9 +64,11 @@ const LABELS = {
   tag: 'Small tag', meta: 'Right-hand note', eyebrow: 'Small line above title', sub: 'Subheading', label: 'Section label',
   quote: 'Quote', note: 'Supporting note', title: 'Title', question: 'Question', options: 'Answer', submit: 'Submit button text',
   thanks: 'Thank-you heading', thanksNote: 'Thank-you note', promptLabel: 'Prompt button text', prompt: 'Prompt text',
+  week: 'Week (e.g. Week 6)', idea: 'The idea', instead: 'Instead of asking', better: 'Try this instead',
+  task: 'Your AI challenge', takeaway: 'Takeaway',
   number: 'Big number', topLeft: 'Top-left note', topRight: 'Top-right note', cardLabel: 'Label on each past edition card',
   imageUrl: 'Image', imageAlt: 'Image description (alt text)', feature: 'Featured story', cards: 'Story card', hero: 'Hero image', transform: 'Featured story image',
-  walkway: 'Story card 1 image', people: 'Story card 2 image', blocks: 'Story card 3 image', ai: 'AI Corner image', challenge: 'Take a break image',
+  walkway: 'Story card 1 image', people: 'Story card 2 image', blocks: 'Story card 3 image', ai: 'AI Enablement image', challenge: 'Take a break image',
 }
 export const pretty = (k) => {
   const base = String(k).replace(/ \d+$/, '')
